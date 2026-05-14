@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "env": {
+    "VITE_DERIV_LEGACY_APP_ID": "133647"
+  },
+  "outputDirectory": "dist/client",
+  "headers": [
+    {
+      "source": "/((?!assets/).*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+  "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/api/ssr" }]
+}

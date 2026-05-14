@@ -1,0 +1,1 @@
+ALTER TABLE public.deriv_accounts ADD CONSTRAINT deriv_accounts_user_account_unique UNIQUE (user_id, account_id);

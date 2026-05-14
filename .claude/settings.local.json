@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\deriv\\\\arktrader-hub\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch \"node_modules|\\\\.git|dist\" })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\deriv\\\\arktrader-hub\" -Recurse -Filter \"*.tsx\" -o Name)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Get-ChildItem *)",
+      "PowerShell(cd \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\deriv\\\\arktrader-hub\"; Get-ChildItem -Force | Format-Table -Property Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} -AutoSize)",
+      "Bash(xargs grep -l \"context\\\\|Context\\\\|Provider\\\\|store\\\\|Store\")",
+      "Bash(npx tsc *)",
+      "Bash(dir C:\\\\Users\\\\ADMIN\\\\Desktop\\\\deriv\\\\arktrader-hub\\\\src\\\\routes *)",
+      "Bash(node -e \"require.resolve\\('nitro/vite'\\)\")",
+      "Bash(xargs basename -a)",
+      "Bash(node -e \"const t = require\\('@tanstack/react-start/plugin/vite'\\); console.log\\(Object.keys\\(t\\)\\)\")",
+      "Bash(xargs grep -l \"TanStackStartViteInputConfig\\\\|server\\\\|preset\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(npx vite *)",
+      "Bash(bun run *)"
+    ]
+  }
+}
