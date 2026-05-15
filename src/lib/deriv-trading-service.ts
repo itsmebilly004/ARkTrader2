@@ -105,6 +105,29 @@ async function recordTrade(
   }
 }
 
+// ─── DB balance gate ──────────────────────────────────────────────────────────
+
+async function assertSufficientBalance(accountId: string | null | undefined, stake: number): Promise<void> {
+  if (!accountId) return;
+  const { data: session } = await supabase.auth.getSession();
+  const userId = session.session?.user.id;
+  if (!userId) return;
+  const { data } = await supabase
+    .from("accounts")
+    .select("balance, currency")
+    .eq("user_id", userId)
+    .eq("loginid", accountId)
+    .maybeSingle();
+  if (!data) return;
+  const balance = Number(data.balance ?? 0);
+  if (balance < stake) {
+    const currency = String(data.currency ?? "USD");
+    throw new Error(
+      `Insufficient balance: ${balance.toFixed(2)} ${currency} available, ${stake.toFixed(2)} ${currency} required.`,
+    );
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function requestProposal(
@@ -112,6 +135,8 @@ export async function requestProposal(
   context: TradeRequestContext = {},
 ): Promise<DerivMessage> {
   const stake = Number(payload.amount ?? payload.stake ?? 1);
+  await assertSufficientBalance(context.selectedAccountId, stake);
+
   const symbol = String(payload.underlying_symbol ?? payload.symbol ?? "R_100");
   const contractType = String(payload.contract_type ?? context.contractType ?? "CALL");
   const payout = parseFloat((stake * 1.85).toFixed(2));

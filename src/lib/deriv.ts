@@ -427,6 +427,7 @@ export function contractTypeFor(category: TradeCategory, side: string): string {
     "matches_differs:matches": "DIGITMATCH",
     "matches_differs:differs": "DIGITDIFF",
     "accumulator:up": "ACCU",
+    "accumulator:buy": "ACCU",
     "multiplier:up": "MULTUP",
     "multiplier:down": "MULTDOWN",
   };

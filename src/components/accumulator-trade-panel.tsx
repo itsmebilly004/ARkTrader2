@@ -8,13 +8,10 @@ import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { updateTrackedTrade, upsertTrackedTrade } from "@/lib/activity-memory";
 import { isDemoAccount } from "@/lib/deriv-account";
 import {
-  buildOAuthUrl,
   ensureDerivTradingConnection,
   getDerivTradingErrorMessage,
   getTradingSocketAccountId,
   onStatus,
-  redirectToDerivOAuth,
-  sanitizeDerivOAuthUrl,
 } from "@/lib/deriv";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -206,27 +203,13 @@ export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketC
 
   function validateAccount() {
     if (!user) throw new Error("Sign in to place trades.");
-    if (!token || !account) throw new Error("Connect and select your Deriv account first.");
+    if (!account) throw new Error("No account selected.");
     if (!tradeCurrency) throw new Error("Selected account currency is missing.");
     if (!Number.isFinite(stake) || stake <= 0) throw new Error("Enter a valid stake.");
     if (accountBalance !== null && accountBalance < stake) {
       throw new Error(
         `Insufficient balance: ${accountBalance.toFixed(2)} ${tradeCurrency} available.`,
       );
-    }
-    if (account.normalizedType !== "demo" && account.normalizedType !== "real") {
-      throw new Error("Selected Deriv account type could not be verified from its prefix.");
-    }
-    if (selectedAccountIsDemo !== Boolean(account.is_demo)) {
-      console.info("[Accumulator] Account classification corrected", {
-        account_id: account.account_id,
-        loginid: account.loginid,
-        detected_prefix: account.detected_prefix,
-        normalizedType: account.normalizedType,
-        final_tab_placement: account.final_tab_placement,
-        stored_is_demo: account.is_demo,
-        normalized_is_demo: selectedAccountIsDemo,
-      });
     }
   }
 
@@ -261,7 +244,7 @@ export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketC
     closedRef.current = false;
     try {
       validateAccount();
-      if (!account || !token) throw new Error("Connect and select your Deriv account first.");
+      if (!account) throw new Error("No account selected.");
       const tradingSession = await ensureDerivTradingConnection(account, {
         context: "accumulator-buy",
       });
@@ -537,20 +520,6 @@ export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketC
 
       <Button
         onClick={() => {
-          if (!token) {
-            buildOAuthUrl({ returnTo: "/" })
-              .then((url) => {
-                console.log("Deriv OAuth URL:", sanitizeDerivOAuthUrl(url));
-                redirectToDerivOAuth(url);
-              })
-              .catch((error) => {
-                const message =
-                  error instanceof Error ? error.message : "Could not start Deriv OAuth.";
-                console.error("[Deriv OAuth] Accumulator connect failed", error);
-                toast.error(message);
-              });
-            return;
-          }
           if (state.status === "active") void handleSell();
           else void startAccumulator();
         }}
@@ -570,9 +539,7 @@ export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketC
             ? canSell
               ? `Sell ${moneyLabel(state.sellPrice, tradeCurrency)}`
               : "Waiting for sell price"
-            : token
-              ? `Buy accumulator (${selectedAccountIsDemo ? "Demo" : "Live"})`
-              : "Sign in & connect Deriv to trade"}
+            : `Buy accumulator (${selectedAccountIsDemo ? "Demo" : "Live"})`}
       </Button>
     </div>
   );
