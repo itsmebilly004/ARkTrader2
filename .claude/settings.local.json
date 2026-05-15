@@ -17,7 +17,8 @@
       "Bash(npx eslint *)",
       "Bash(echo \"exit=$?\")",
       "Bash(npx vite *)",
-      "Bash(bun run *)"
+      "Bash(bun run *)",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)"
     ]
   }
 }

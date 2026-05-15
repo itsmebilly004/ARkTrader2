@@ -1,9 +1,11 @@
 // Reads balances from the Supabase accounts table.
-// Seeds ROT90769691 (real) and DOT91870166 (demo) for new users automatically.
+// Account rows are created server-side by the `handle_new_user` trigger; this
+// hook also calls ensureUserProvisioned as a client-side safety net.
 // Maintains identical LiveBalance / DerivAccount shape so all consumers compile.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureUserProvisioned } from "@/lib/account-provisioning";
 import { useAuth } from "@/hooks/use-auth";
 import type { DerivTokenSource, TradingAdapter } from "@/lib/deriv";
 import type { DerivAccountPlacement, DerivAccountType } from "@/lib/deriv-account";
@@ -82,18 +84,6 @@ function dbToDerivAccount(row: DbAccount): DerivAccount {
   };
 }
 
-async function seedAccounts(userId: string): Promise<void> {
-  const seeds = [
-    { loginid: "ROT90769691", account_type: "real", currency: "USD", balance: 10000, is_demo: false, is_virtual: false },
-    { loginid: "DOT91870166", account_type: "demo", currency: "USD", balance: 10000, is_demo: true, is_virtual: true },
-  ];
-  for (const seed of seeds) {
-    await supabase.from("accounts").upsert(
-      { ...seed, user_id: userId },
-      { onConflict: "user_id,loginid", ignoreDuplicates: true },
-    );
-  }
-}
 
 const SELECTED_KEY = (userId: string) => `selected_account:${userId}`;
 
@@ -129,7 +119,7 @@ export function useDerivBalance(): LiveBalance {
     const init = async () => {
       if (!seededRef.current) {
         seededRef.current = true;
-        await seedAccounts(user.id);
+        await ensureUserProvisioned(user.id, user.email ?? null);
       }
       if (cancelled) return;
       const mapped = await loadAccounts(user.id);

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureUserProvisioned } from "@/lib/account-provisioning";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,19 +46,55 @@ export function SupabaseAuthForm({
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: values.email,
           password: values.password,
         });
         if (error) throw error;
-        toast.success("Account created! Check your email to confirm.");
+
+        // When the project has "Confirm email" disabled, signUp returns a
+        // session and the user is already logged in. Otherwise we have a
+        // user without a session and need the user to confirm via email.
+        if (data.session && data.user) {
+          await ensureUserProvisioned(data.user.id, data.user.email ?? values.email);
+          toast.success("Account created. Welcome to ArkTrader Hub!");
+          form.reset();
+          onSuccess?.();
+          return;
+        }
+
+        // Fallback: try to sign in immediately (works when confirm-email is off
+        // but the signUp response somehow didn't include a session).
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email: values.email,
+            password: values.password,
+          });
+        if (!signInError && signInData.session && signInData.user) {
+          await ensureUserProvisioned(
+            signInData.user.id,
+            signInData.user.email ?? values.email,
+          );
+          toast.success("Account created. Welcome to ArkTrader Hub!");
+          form.reset();
+          onSuccess?.();
+          return;
+        }
+
+        toast.success(
+          "Account created. Check your email to confirm before signing in.",
+        );
         form.reset();
+        setMode("signin");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: values.email,
           password: values.password,
         });
         if (error) throw error;
+        if (data.user) {
+          await ensureUserProvisioned(data.user.id, data.user.email ?? values.email);
+        }
         toast.success("Signed in successfully.");
         form.reset();
         onSuccess?.();
