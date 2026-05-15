@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
+import { RotateCcw } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import type { DerivAccount } from "@/hooks/use-deriv-balance";
 
 type UserSettings = Tables<"user_settings">;
 
@@ -16,9 +18,89 @@ export const Route = createFileRoute("/dashboard/settings")({
   component: SettingsPage,
 });
 
+function BalanceResetRow({ account, onReset }: { account: DerivAccount; onReset: () => void }) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleReset() {
+    const amount = parseFloat(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Enter a valid amount (0 or greater).");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase
+      .from("accounts")
+      .update({ balance: amount, updated_at: new Date().toISOString() })
+      .eq("loginid", account.loginid);
+    setBusy(false);
+    if (error) {
+      toast.error("Could not reset balance: " + error.message);
+    } else {
+      toast.success(
+        `${account.is_demo ? "Demo" : "Real"} account balance reset to ${amount.toFixed(2)} ${account.currency ?? "USD"}.`,
+      );
+      setValue("");
+      onReset();
+    }
+  }
+
+  return (
+    <li className="flex min-w-0 flex-wrap items-center gap-3 py-4 sm:flex-nowrap">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="truncate font-mono text-sm font-medium">{account.account_id}</span>
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
+              account.is_demo
+                ? "bg-foreground/5 text-muted-foreground"
+                : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
+            {account.is_demo ? "Demo" : "Real"}
+          </span>
+        </div>
+        <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+          Current: {Number(account.balance ?? 0).toFixed(2)} {account.currency ?? "USD"}
+        </div>
+      </div>
+
+      <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+        <div className="relative w-full sm:w-36">
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground">
+            {account.currency ?? "USD"}
+          </span>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            className="pl-10 font-mono text-sm"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleReset();
+            }}
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || value === ""}
+          onClick={handleReset}
+          className="shrink-0 gap-1.5"
+        >
+          <RotateCcw className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
+          {busy ? "Saving…" : "Reset"}
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 function SettingsPage() {
   const { user } = useAuth();
-  const { accounts } = useDerivBalanceContext();
+  const { accounts, refreshBalances } = useDerivBalanceContext();
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
   const load = useCallback(async () => {
@@ -70,6 +152,9 @@ function SettingsPage() {
     window.location.href = "/";
   }
 
+  const realAccounts = accounts.filter((a) => !a.is_demo);
+  const demoAccounts = accounts.filter((a) => a.is_demo);
+
   return (
     <div className="w-full max-w-3xl min-w-0 space-y-6">
       <div>
@@ -77,8 +162,10 @@ function SettingsPage() {
         <p className="text-sm text-muted-foreground">Manage your accounts, risk controls, and preferences.</p>
       </div>
 
+      {/* ── Account overview ── */}
       <section className="glass-card rounded-xl p-5">
-        <h3 className="mb-4 text-sm font-medium">Trading accounts</h3>
+        <h3 className="mb-1 text-sm font-medium">Trading accounts</h3>
+        <p className="mb-4 text-xs text-muted-foreground">Your linked real and demo accounts.</p>
         {accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No accounts found.</p>
         ) : (
@@ -92,7 +179,7 @@ function SettingsPage() {
                       className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
                         a.is_demo
                           ? "bg-foreground/5 text-muted-foreground"
-                          : "bg-success/20 text-success"
+                          : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                       }`}
                     >
                       {a.is_demo ? "Demo" : "Live"}
@@ -108,6 +195,55 @@ function SettingsPage() {
         )}
       </section>
 
+      {/* ── Reset balance ── */}
+      <section className="glass-card rounded-xl p-5">
+        <h3 className="mb-1 text-sm font-medium">Reset account balance</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Set any balance you like on your real or demo account. The new amount is saved immediately to the
+          database and reflected in your trading balance.
+        </p>
+
+        {accounts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No accounts to reset.</p>
+        ) : (
+          <ul className="divide-y divide-glass-border">
+            {realAccounts.length > 0 && (
+              <>
+                <li className="pb-1 pt-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Real accounts
+                  </span>
+                </li>
+                {realAccounts.map((a) => (
+                  <BalanceResetRow
+                    key={a.account_id}
+                    account={a}
+                    onReset={() => void refreshBalances("settings-reset")}
+                  />
+                ))}
+              </>
+            )}
+            {demoAccounts.length > 0 && (
+              <>
+                <li className="pb-1 pt-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Demo accounts
+                  </span>
+                </li>
+                {demoAccounts.map((a) => (
+                  <BalanceResetRow
+                    key={a.account_id}
+                    account={a}
+                    onReset={() => void refreshBalances("settings-reset")}
+                  />
+                ))}
+              </>
+            )}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Risk controls ── */}
       {settings && (
         <section className="glass-card rounded-xl p-5">
           <h3 className="mb-4 text-sm font-medium">Risk controls</h3>
@@ -151,6 +287,7 @@ function SettingsPage() {
         </section>
       )}
 
+      {/* ── Danger zone ── */}
       <section className="glass-card rounded-xl border-destructive/30 p-5">
         <h3 className="text-sm font-medium text-destructive">Danger zone</h3>
         <p className="mt-1 text-sm text-muted-foreground">Permanently remove your data from ArkTrader Hub.</p>
