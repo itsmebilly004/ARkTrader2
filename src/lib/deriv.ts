@@ -114,12 +114,6 @@ export type TickPoint = { time: number; value: number };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const DERIV_APP_ID_VALUE = "33dF8d2wwjIpeFDBvNkln";
-export const DERIV_CLIENT_ID_VALUE = "33dF8d2wwjIpeFDBvNkln";
-export const DERIV_REDIRECT_URI_VALUE = "https://www.arktradershub.com/deriv-callback";
-export const DERIV_OAUTH_ENDPOINT_VALUE = "https://auth.deriv.com/oauth2/auth";
-export const DERIV_OAUTH_DASHBOARD_FAILURE_MESSAGE =
-  "Deriv OAuth is not used in this version. Accounts are managed through the app database.";
 export const DERIV_TRADING_SESSION_NOT_INITIALIZED_MESSAGE = "Trading session not initialized";
 export const DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE =
   "Account connected. Trading authorization not ready yet.";

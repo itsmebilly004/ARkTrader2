@@ -25,7 +25,6 @@ import {
   getDerivTradingErrorMessage,
   type TradeCategory,
   type TradingAdapter,
-  disconnectAll,
 } from "@/lib/deriv";
 import { resolveRunnableBotSettings, type BotBuilderSettings } from "@/lib/bot-builder-state";
 import { buyProposal, requestProposal, subscribeOpenContract } from "@/lib/deriv-trading-service";
@@ -58,7 +57,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { type DerivAccount } from "@/hooks/use-deriv-balance";
 import { numberFrom } from "@/lib/contract-state";
-import { hasDerivAccountPrefix, isDemoAccount } from "@/lib/deriv-account";
+import { isDemoAccount } from "@/lib/deriv-account";
 
 const CURRENCY_META: Record<string, { country?: string; name: string; symbol?: string }> = {
   AUD: { country: "au", name: "Australian Dollar" },
@@ -214,54 +213,8 @@ export function TopShell({
     user?.id,
   ]);
 
-  useEffect(() => {
-    console.info(
-      "[Deriv Accounts] dropdown normalized account placement",
-      accounts.map((item) => ({
-        raw_account_id: item.account_id,
-        raw_loginid: item.loginid,
-        detected_prefix: item.detected_prefix,
-        normalizedType: item.normalizedType,
-        final_tab_placement: item.final_tab_placement,
-      })),
-    );
-    console.info("[Deriv Accounts] dropdown realAccounts", realAccounts);
-    console.info("[Deriv Accounts] dropdown demoAccounts", demoAccounts);
-    console.info("[Deriv Accounts] dropdown selectedAccount", account);
-    console.assert(
-      realAccounts.every((item) => item.normalizedType === "real"),
-      "[Deriv Accounts] Real tab contains a non-real account",
-      realAccounts,
-    );
-    console.assert(
-      demoAccounts.every((item) => item.normalizedType === "demo"),
-      "[Deriv Accounts] Demo tab contains a non-demo account",
-      demoAccounts,
-    );
-    console.assert(
-      realAccounts.every((item) => !hasDerivAccountPrefix(item, "DOT")),
-      "[Deriv Accounts] Real tab contains a DOT demo account",
-      realAccounts,
-    );
-    console.assert(
-      demoAccounts.every((item) => !hasDerivAccountPrefix(item, "ROT")),
-      "[Deriv Accounts] Demo tab contains a ROT real account",
-      demoAccounts,
-    );
-    const unknownAccounts = accounts.filter((item) => item.normalizedType === "unknown");
-    if (unknownAccounts.length) {
-      console.warn(
-        "[Deriv Accounts] unknown accounts not rendered in account tabs",
-        unknownAccounts,
-      );
-    }
-  }, [account, accounts, demoAccounts, realAccounts]);
 
   async function handleLogout() {
-    if (user) {
-      await supabase.from("sessions").update({ is_active: false }).eq("user_id", user.id);
-    }
-    disconnectAll();
     await supabase.auth.signOut();
     navigate({ to: "/auth", search: { mode: "signin" } });
   }
@@ -274,10 +227,6 @@ export function TopShell({
       const message = error instanceof Error ? error.message : "Could not refresh balances.";
       toast.error(message);
     }
-  }
-
-  function handleDeposit() {
-    toast.info("This is a simulated account. Deposits are not required.");
   }
 
   function addFooterBotJournal(
@@ -530,12 +479,6 @@ export function TopShell({
           </button>
           {user && account && (
             <>
-              <Button
-                onClick={handleDeposit}
-                className="hidden h-9 rounded-md bg-[#ff444f] px-5 text-sm font-bold text-white hover:bg-[#eb3e48] sm:inline-flex"
-              >
-                Deposit
-              </Button>
               <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <button className="flex min-w-0 max-w-[min(58vw,17rem)] items-center gap-1.5 rounded-full border border-[#d6d6d6] bg-white px-2 py-1.5 transition hover:bg-[#f2f3f4] sm:max-w-full sm:gap-2 sm:px-3 dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:hover:bg-[#222]">
@@ -584,7 +527,7 @@ export function TopShell({
                     <div className="px-4 pb-2 pt-4">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-sm font-bold text-[#333333] dark:text-[#f2f2f2]">
-                          Deriv accounts
+                          Your accounts
                         </span>
                         <ChevronUp className="size-4 text-[#333333] dark:text-[#f2f2f2]" />
                       </div>
@@ -622,22 +565,10 @@ export function TopShell({
                           {totalAssetsLabel(visibleAccounts)}
                         </div>
                         <div className="mt-0.5 text-xs text-[#777777] dark:text-[#b7b7b7]">
-                          Total assets in your Deriv accounts.
+                          Total balance across your accounts.
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="border-t border-[#eeeeee] bg-[#f9f9f9] px-4 py-3 text-center dark:border-[#2b2b2b] dark:bg-[#101010]">
-                    <p className="text-[13px] text-[#333333] dark:text-[#d8d8d8]">
-                      Looking for CFD accounts?{" "}
-                      <a
-                        href="#"
-                        className="font-bold text-[#333333] hover:underline dark:text-[#f2f2f2]"
-                      >
-                        Go to Trader&apos;s Hub
-                      </a>
-                    </p>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-3 dark:bg-[#151515]">
@@ -667,6 +598,17 @@ export function TopShell({
               <div className="size-5 animate-pulse rounded-full bg-[#e5e5e5] dark:bg-[#333]" />
               <div className="h-3 w-20 animate-pulse rounded bg-[#e5e5e5] dark:bg-[#333]" />
             </div>
+          )}
+
+          {user && !account && !balanceLoading && (
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="flex items-center gap-1.5 rounded-full border border-[#d6d6d6] bg-white px-3 py-1.5 text-sm font-medium text-[#333333] transition hover:bg-[#f2f3f4] dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:text-[#e6e6e6] dark:hover:bg-[#222]"
+            >
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
           )}
 
           {!user && (

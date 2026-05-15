@@ -8,7 +8,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-const STARTING_BALANCE = 10000;
+const STARTING_BALANCE = 0;
 
 function loginidsFor(userId: string): { real: string; demo: string } {
   const hex = userId.replace(/-/g, "");
