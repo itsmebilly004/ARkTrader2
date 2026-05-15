@@ -41,10 +41,8 @@ import {
   upsertTrackedTrade,
 } from "@/lib/activity-memory";
 import {
-  ensureDerivTradingConnection,
   getDerivTradingErrorMessage,
   type TradeCategory,
-  type TradingAdapter,
 } from "@/lib/deriv";
 import { BOT_PRESET_CONFIGS, type BotPresetConfig } from "@/lib/bot-presets";
 import { buyProposal, requestProposal, subscribeOpenContract } from "@/lib/deriv-trading-service";
@@ -560,9 +558,15 @@ function BotBuilderPage() {
       return;
     }
 
+    if (!user) {
+      toast.error("Sign in to run the bot.");
+      addJournal("Run blocked: no user signed in.", "error");
+      return;
+    }
+
     if (!account) {
-      toast.error("Connect and select a Deriv account before running the bot.");
-      addJournal("Run blocked: no Deriv account selected.", "error");
+      toast.error("No account selected. Select an account before running the bot.");
+      addJournal("Run blocked: no account selected.", "error");
       return;
     }
 
@@ -572,13 +576,12 @@ function BotBuilderPage() {
     addJournal("Bot run started.", "success");
 
     try {
-      const session = await ensureDerivTradingConnection(account, { context: "bot-builder-run" });
       const runCurrency = accountCurrency || account.currency || settingsRef.current.currency;
       const context = {
-        adapter: session.adapter,
+        adapter: "oauth2PkceTradingAdapter" as const,
         contractType: contractTypeLabel(settingsRef.current),
-        selectedAccountId: session.account_id,
-        selectedAccountType: session.normalizedType,
+        selectedAccountId: account.account_id,
+        selectedAccountType: account.normalizedType,
       };
       let currentStake = settingsRef.current.stake;
       let runningProfit = stats.totalProfitLoss;
@@ -599,7 +602,7 @@ function BotBuilderPage() {
         for (let attempt = 1; attempt <= BOT_TRADE_MAX_ATTEMPTS; attempt += 1) {
           let contractWasBought = false;
           try {
-            const payload = buildStandardProposalPayload(input, session.adapter as TradingAdapter);
+            const payload = buildStandardProposalPayload(input, "oauth2PkceTradingAdapter");
             addJournal(
               `Requesting proposal for ${contractTypeLabel(snapshot)} with ${stake.toFixed(2)} ${snapshot.currency}.`,
             );
@@ -677,7 +680,7 @@ function BotBuilderPage() {
               attempt < BOT_TRADE_MAX_ATTEMPTS &&
               shouldRetryBotTrade(error)
             ) {
-              addJournal("Deriv returned a temporary processing error. Retrying once.", "warning");
+              addJournal("A temporary processing error occurred. Retrying once.", "warning");
               await sleep(1500);
               continue;
             }
@@ -688,7 +691,7 @@ function BotBuilderPage() {
         if (!settlement) {
           const message = getDerivTradingErrorMessage(tradeError);
           if (snapshot.restartBuySellOnError || snapshot.restartLastTradeOnError) {
-            addJournal(`Skipped one bot run after Deriv rejected the trade: ${message}`, "warning");
+            addJournal(`Skipped one bot run after trade error: ${message}`, "warning");
             await sleep(700);
             continue;
           }

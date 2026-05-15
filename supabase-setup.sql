@@ -1,5 +1,6 @@
 -- ArkTrader Hub — Supabase database setup
 -- Run this entire script in the Supabase SQL Editor (https://supabase.com/dashboard/project/fqjezgxidmdgjaqvzoto/sql)
+-- Safe to re-run: uses IF NOT EXISTS for tables and drops policies before recreating.
 
 -- ─── Enable UUID extension ────────────────────────────────────────────────────
 create extension if not exists "pgcrypto";
@@ -13,6 +14,10 @@ create table if not exists public.users (
 );
 
 alter table public.users enable row level security;
+
+drop policy if exists "Users can read own profile"   on public.users;
+drop policy if exists "Users can update own profile" on public.users;
+drop policy if exists "Users can insert own profile" on public.users;
 
 create policy "Users can read own profile"
   on public.users for select
@@ -42,6 +47,10 @@ create table if not exists public.accounts (
 );
 
 alter table public.accounts enable row level security;
+
+drop policy if exists "Users can read own accounts"   on public.accounts;
+drop policy if exists "Users can insert own accounts" on public.accounts;
+drop policy if exists "Users can update own accounts" on public.accounts;
 
 create policy "Users can read own accounts"
   on public.accounts for select
@@ -75,6 +84,10 @@ create table if not exists public.trades (
 
 alter table public.trades enable row level security;
 
+drop policy if exists "Users can read own trades"   on public.trades;
+drop policy if exists "Users can insert own trades" on public.trades;
+drop policy if exists "Users can update own trades" on public.trades;
+
 create policy "Users can read own trades"
   on public.trades for select
   using (auth.uid() = user_id);
@@ -100,6 +113,8 @@ create table if not exists public.bots (
 
 alter table public.bots enable row level security;
 
+drop policy if exists "Users can manage own bots" on public.bots;
+
 create policy "Users can manage own bots"
   on public.bots for all
   using (auth.uid() = user_id)
@@ -122,6 +137,8 @@ create table if not exists public.user_settings (
 
 alter table public.user_settings enable row level security;
 
+drop policy if exists "Users can manage own settings" on public.user_settings;
+
 create policy "Users can manage own settings"
   on public.user_settings for all
   using (auth.uid() = user_id)
@@ -137,6 +154,8 @@ create table if not exists public.watchlist (
 );
 
 alter table public.watchlist enable row level security;
+
+drop policy if exists "Users can manage own watchlist" on public.watchlist;
 
 create policy "Users can manage own watchlist"
   on public.watchlist for all
@@ -166,6 +185,8 @@ create table if not exists public.sessions (
 );
 
 alter table public.sessions enable row level security;
+
+drop policy if exists "Users can manage own sessions" on public.sessions;
 
 create policy "Users can manage own sessions"
   on public.sessions for all
@@ -214,5 +235,19 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- ─── Enable Realtime for live balance updates ─────────────────────────────────
-alter publication supabase_realtime add table public.accounts;
-alter publication supabase_realtime add table public.trades;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'accounts'
+  ) then
+    alter publication supabase_realtime add table public.accounts;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'trades'
+  ) then
+    alter publication supabase_realtime add table public.trades;
+  end if;
+end $$;
