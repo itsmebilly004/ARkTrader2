@@ -25,6 +25,7 @@ const _blockDef = {
 
         this.setMovable(false);
         this.setDeletable(false);
+        this.setPreviousStatement(true, null);
         this.setOnChange(() => {
             const next_block = this?.getNextBlock();
             if (next_block?.type !== 'trade_definition_restartonerror') {

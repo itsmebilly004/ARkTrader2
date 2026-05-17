@@ -18,9 +18,9 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
     init() {
         this.jsonInit(this.definition());
         this.setInputsInline(true);
-
         // Ensure one of this type per statement-stack
         this.setNextStatement(false);
+        this.setPreviousStatement(true, null);
     },
     definition() {
         const is_stake = this.type === 'trade_definition_tradeoptions';

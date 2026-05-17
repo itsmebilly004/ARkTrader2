@@ -617,7 +617,7 @@ export function loadWorkspaceXmlIntoBlockly(
     // Group teardown + rebuild as one transaction. We intentionally do NOT
     // disable events (that suppresses BLOCK_CREATE and stops Blockly's
     // renderer from drawing new blocks until the next page refresh).
-    B.Events?.setGroup?.(`bot-load-${Date.now()}`);
+    B.Events?.setGroup?.(`dbot-load${Date.now()}`);
 
     // 1) Force every top block deletable so clearWorkspaceAndLoadFromXml can
     //    actually dispose them. Older saves stored deletable=false on the

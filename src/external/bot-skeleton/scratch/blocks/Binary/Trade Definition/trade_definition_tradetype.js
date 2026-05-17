@@ -29,6 +29,7 @@ const _blockDef = {
         });
         this.setMovable(false);
         this.setDeletable(false);
+        this.setPreviousStatement(true, null);
     },
     onchange(event) {
         if (!this.workspace || window.Blockly.derivWorkspace.isFlyoutVisible || this.workspace.isDragging()) {

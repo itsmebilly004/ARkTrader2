@@ -14,9 +14,9 @@ import {
 window.Blockly.Blocks.trade_definition_multiplier = {
     init() {
         this.jsonInit(this.definition());
-
         // Ensure one of this type per statement-stack
         this.setNextStatement(false);
+        this.setPreviousStatement(true, null);
     },
     definition() {
         return {

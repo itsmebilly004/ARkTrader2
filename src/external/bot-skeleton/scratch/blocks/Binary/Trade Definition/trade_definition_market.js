@@ -62,6 +62,7 @@ const _blockDef = {
 
         this.setMovable(false);
         this.setDeletable(false);
+        this.setPreviousStatement(true, null);
     },
     customContextMenu(menu) {
         const menu_items = [localize('Enable Block'), localize('Disable Block')];

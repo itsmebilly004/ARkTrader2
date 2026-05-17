@@ -15,9 +15,9 @@ import {
 window.Blockly.Blocks.trade_definition_accumulator = {
     init() {
         this.jsonInit(this.definition());
-
         // Ensure one of this type per statement-stack
         this.setNextStatement(false);
+        this.setPreviousStatement(true, null);
     },
     definition() {
         return {

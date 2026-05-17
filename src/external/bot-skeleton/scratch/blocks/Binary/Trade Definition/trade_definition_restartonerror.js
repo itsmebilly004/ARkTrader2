@@ -20,12 +20,13 @@ const _blockDef = {
             colourSecondary: window.Blockly.Colours.Base.colourSecondary,
             colourTertiary: window.Blockly.Colours.Base.colourTertiary,
             previousStatement: null,
-            nextStatement: null,
+            // nextStatement intentionally omitted — this is the terminal block in the chain
         });
 
-        this.setNextStatement(false);
         this.setMovable(false);
         this.setDeletable(false);
+        // Ensure previousConnection always exists regardless of jsonInit ordering
+        this.setPreviousStatement(true, null);
     },
     onchange(event) {
         if (!this.workspace || window.Blockly.derivWorkspace.isFlyoutVisible || this.workspace.isDragging()) {
