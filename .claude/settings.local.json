@@ -28,7 +28,21 @@
       "Bash(where npm *)",
       "Bash(npm --version)",
       "Bash(npm install *)",
-      "Bash(node_modules/.bin/vite build *)"
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(python3 -c \"import json,sys; pkg=json.load\\(sys.stdin\\); deps={**pkg.get\\('dependencies',{}\\), **pkg.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in sorted\\(deps.items\\(\\)\\)]\")",
+      "Bash(dir /s \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('/dev/stdin','utf8'\\)\\); const deps={...d.dependencies,...d.devDependencies}; console.log\\(Object.keys\\(deps\\).filter\\(k=>['blockly','mobx','lightweight-charts','lz-string','localforage','formik','yup','mobx-react-lite','classnames'].includes\\(k\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const d=require\\('./package.json'\\); const deps={...d.dependencies,...d.devDependencies}; console.log\\(['blockly','mobx','lightweight-charts','lz-string','localforage','formik','yup','mobx-react-lite','classnames'].filter\\(k=>!deps[k]\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); ['blockly','mobx','mobx-react-lite','lz-string','localforage','formik','yup','classnames'].forEach\\(k => console.log\\(k, p.dependencies[k] || p.devDependencies?.[k] || 'MISSING'\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); ['blockly','mobx','mobx-react-lite','lz-string','localforage','formik','yup','classnames'].forEach\\(k => console.log\\(k, p.dependencies[k] || 'MISSING'\\)\\)\")",
+      "Bash(Copy-Item \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\assets\\\\ArkTraders Osam AutoPilot.xml\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\ArkTraders Osam AutoPilot.xml\")",
+      "Bash(Copy-Item \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\assets\\\\ArkTraders UnderPro Sentinel.xml\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\ArkTraders UnderPro Sentinel.xml\")",
+      "Bash(Copy-Item \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\assets\\\\Phantom HitRun.xml\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\Phantom HitRun.xml\")",
+      "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\bot-builder\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
+      "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\bot-skeleton\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
+      "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\shims\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
+      "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\stores\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
+      "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\xml\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")"
     ]
   }
 }

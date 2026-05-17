@@ -234,6 +234,29 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+-- ─── bot_xml_presets (stores XML content for each trading bot preset) ────────
+create table if not exists public.bot_xml_presets (
+  bot_id      text primary key,
+  name        text not null,
+  xml_content text not null,
+  updated_at  timestamptz not null default now()
+);
+
+-- Publicly readable so any authenticated user can fetch presets
+alter table public.bot_xml_presets enable row level security;
+
+drop policy if exists "Anyone authenticated can read bot presets" on public.bot_xml_presets;
+drop policy if exists "Service role can upsert bot presets"       on public.bot_xml_presets;
+
+create policy "Anyone authenticated can read bot presets"
+  on public.bot_xml_presets for select
+  using (auth.role() = 'authenticated');
+
+create policy "Service role can upsert bot presets"
+  on public.bot_xml_presets for all
+  using (true)
+  with check (true);
+
 -- ─── Enable Realtime for live balance updates ─────────────────────────────────
 do $$
 begin

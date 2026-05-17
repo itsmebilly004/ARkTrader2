@@ -123,6 +123,7 @@ export function TradePanel({
   const tradeIdRef = useRef<string | null>(null);
   const activeAccountIdRef = useRef<string | null>(null);
   const closedRef = useRef(false);
+  const profitFlashTimerRef = useRef<number | null>(null);
 
   const config = tradeTypeConfig(selectedTradeType);
   const currentDigit =
@@ -138,6 +139,9 @@ export function TradePanel({
   useEffect(() => {
     return () => {
       void cleanupSubscription();
+      if (profitFlashTimerRef.current !== null) {
+        window.clearTimeout(profitFlashTimerRef.current);
+      }
     };
   }, []);
 
@@ -284,6 +288,37 @@ export function TradePanel({
     }, 3500);
     return () => window.clearTimeout(resetTimer);
   }, [account, activeContract.status, refreshBalances, selectedTradeType]);
+
+  // Flash P/L on the chart for 2 seconds when any non-accumulator trade closes.
+  useEffect(() => {
+    if (selectedTradeType === "accumulator") return;
+    if (!["won", "lost", "sold"].includes(activeContract.status)) return;
+    const profit = activeContract.currentProfit;
+    if (profit == null) return;
+
+    if (profitFlashTimerRef.current !== null) {
+      window.clearTimeout(profitFlashTimerRef.current);
+      profitFlashTimerRef.current = null;
+    }
+
+    const isWin = profit >= 0;
+    onAccumulatorBarriers?.({
+      entry: activeContract.entrySpot,
+      high: config.needsBarrier
+        ? barrierLineFromInput(barrier, activeContract.entrySpot ?? lastPrice)
+        : null,
+      low: null,
+      profit,
+      profitCurrency: tradeCurrency,
+      profitStatus: isWin ? "active" : "lost",
+    });
+
+    profitFlashTimerRef.current = window.setTimeout(() => {
+      profitFlashTimerRef.current = null;
+      onAccumulatorBarriers?.({ entry: null, high: null, low: null, profit: null, profitStatus: null });
+    }, 2000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeContract.status]);
 
   useEffect(() => {
     const selectedAccountId = account?.account_id ?? null;

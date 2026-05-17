@@ -1,0 +1,485 @@
+/* The bot-builder shell sits inside TopShell's <main>, which is itself a
+   flex column inside .min-h-dvh viewport box. We need the shell to fill the
+   remaining vertical space so Blockly has a fixed pixel height to render into. */
+.bot-builder-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: calc(100dvh - 9.5rem);
+  min-height: 24rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  --bot-builder-sidebar-width: 240px;
+}
+
+@media (max-width: 640px) {
+  .bot-builder-shell {
+    height: calc(100dvh - 11rem);
+    --bot-builder-sidebar-width: 200px;
+  }
+}
+
+.bot-builder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  flex: 0 0 auto;
+  z-index: 1;
+}
+
+@media (min-width: 640px) {
+  .bot-builder-toolbar {
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    flex-wrap: nowrap;
+  }
+}
+
+.bot-builder-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: hsl(var(--border));
+  margin: 0 0.25rem;
+}
+
+.bot-builder-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  background: hsl(var(--background));
+}
+
+/* ------- Sidebar (Blocks menu) -------- */
+
+.bot-builder-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--bot-builder-sidebar-width);
+  width: var(--bot-builder-sidebar-width);
+  border-right: 1px solid hsl(var(--border));
+  background: #ffffff;
+  overflow-y: auto;
+  z-index: 4;
+}
+
+.dark .bot-builder-sidebar {
+  background: #151515;
+}
+
+.bot-builder-quick-strategy {
+  margin: 0.75rem 0.75rem 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 0;
+  background: #ff444f;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.bot-builder-quick-strategy:hover {
+  background: #eb3e48;
+}
+
+.bot-builder-blocks-menu {
+  position: relative;
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.bot-builder-blocks-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #f4f4f5;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dark .bot-builder-blocks-menu-header {
+  background: #1f1f1f;
+}
+
+.bot-builder-sidebar-collapse {
+  position: absolute;
+  top: 50%;
+  right: -1.75rem;
+  transform: translateY(-50%);
+  width: 1.75rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  border: 1px solid hsl(var(--border));
+  border-left: 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  z-index: 6;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+  transition: background 0.15s ease;
+}
+
+.bot-builder-sidebar-collapse:hover {
+  background: #f4f4f5;
+}
+
+.dark .bot-builder-sidebar-collapse {
+  background: #1f1f1f;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.4);
+}
+
+.dark .bot-builder-sidebar-collapse:hover {
+  background: #2a2a2a;
+}
+
+.bot-builder-sidebar-collapse svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.bot-builder-sidebar-expand-tab {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.4rem;
+  background: #ffffff;
+  border: 1px solid hsl(var(--border));
+  border-left: 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  z-index: 5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.bot-builder-sidebar-expand-tab:hover {
+  background: #f4f4f5;
+}
+
+.dark .bot-builder-sidebar-expand-tab {
+  background: #1f1f1f;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.dark .bot-builder-sidebar-expand-tab:hover {
+  background: #2a2a2a;
+}
+
+.bot-builder-sidebar-expand-tab-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: inherit;
+}
+
+.bot-builder-sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: #ffffff;
+}
+
+.dark .bot-builder-sidebar-search {
+  background: #151515;
+}
+
+.bot-builder-sidebar-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: inherit;
+}
+
+.bot-builder-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+.bot-builder-sidebar-item,
+.bot-builder-sidebar-subitem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 0.875rem;
+  color: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.bot-builder-sidebar-item:hover,
+.bot-builder-sidebar-subitem:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.bot-builder-sidebar-item--active {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 600;
+}
+
+.bot-builder-sidebar-sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.25rem 0;
+}
+
+.bot-builder-sidebar-subitem {
+  padding-left: 1.75rem;
+  font-size: 0.825rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Collapsed sidebar: hide it, expand the workspace, swap in the expand tab. */
+.bot-builder-shell--sidebar-collapsed .bot-builder-sidebar {
+  display: none;
+}
+
+/* ------- Workspace area -------- */
+
+.bot-builder-workspace-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.dark .bot-builder-workspace-wrapper {
+  background: #1a1a1a;
+}
+
+#scratch_div {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#scratch_div .blocklySvg {
+  background: #f5f5f5;
+}
+
+.dark #scratch_div .blocklySvg {
+  background: #1a1a1a;
+}
+
+/* ------- Block + field readability (light + dark) -------
+   The Zelos renderer sets text fill inline so we need !important to win.
+   Default goal: BLACK text on the WHITE field chips in light mode; near-white
+   text on dark chips in dark mode. */
+
+/* Block body text everywhere — including inside editable fields and dropdowns. */
+#scratch_div .blocklyText,
+#scratch_div .blocklyEditableText > text,
+#scratch_div .blocklyEditableText .blocklyEditableLabel,
+#scratch_div .blocklyDropdownText,
+#scratch_div .blocklyFieldText {
+  fill: #0f172a !important;
+  font-weight: 600;
+}
+
+.dark #scratch_div .blocklyText,
+.dark #scratch_div .blocklyEditableText > text,
+.dark #scratch_div .blocklyEditableText .blocklyEditableLabel,
+.dark #scratch_div .blocklyDropdownText,
+.dark #scratch_div .blocklyFieldText {
+  fill: #f1f5f9 !important;
+}
+
+/* The "1. Trade parameters" / "2. Purchase conditions" headers sit on the
+   indigo root block — keep their text white in BOTH themes. */
+#scratch_div .blocklyTextRootBlockHeader,
+.dark #scratch_div .blocklyTextRootBlockHeader {
+  fill: #ffffff !important;
+}
+
+/* Editable field background rect: pure white in light mode so the user sees
+   a clear "chip" against the surrounding block. */
+#scratch_div .blocklyEditableText > rect:not(.blocklyDropdownRect),
+#scratch_div .blocklyEditableText .blocklyFieldRect,
+#scratch_div rect.blocklyFieldRect {
+  fill: #ffffff !important;
+  stroke: #cbd5e1 !important;
+  stroke-width: 1px !important;
+}
+
+.dark #scratch_div .blocklyEditableText > rect:not(.blocklyDropdownRect),
+.dark #scratch_div .blocklyEditableText .blocklyFieldRect,
+.dark #scratch_div rect.blocklyFieldRect {
+  fill: #1f1f1f !important;
+  stroke: #4a4a4a !important;
+}
+
+/* Dropdown chevron arrow inside fields — make it contrast the chip. */
+#scratch_div .blocklyArrow,
+#scratch_div .blocklyDropdownIcon path {
+  fill: #475569 !important;
+}
+
+.dark #scratch_div .blocklyArrow,
+.dark #scratch_div .blocklyDropdownIcon path {
+  fill: #cbd5e1 !important;
+}
+
+/* The actual <input type="text"> Blockly opens when you click a field. */
+.blocklyHtmlInput {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.dark .blocklyHtmlInput {
+  background: #1f1f1f !important;
+  color: #f1f5f9 !important;
+  border-color: #4a4a4a !important;
+}
+
+/* Dropdown menu rendered when the user opens a field_dropdown. */
+.blocklyDropDownDiv {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.blocklyDropDownContent .goog-menuitem-content,
+.blocklyDropDownContent .blocklyMenuItemContent {
+  color: #0f172a !important;
+}
+
+.dark .blocklyDropDownDiv {
+  background-color: #1f1f1f !important;
+  border-color: #4a4a4a !important;
+  color: #f1f5f9 !important;
+}
+
+.dark .blocklyDropDownContent .goog-menuitem-content,
+.dark .blocklyDropDownContent .blocklyMenuItemContent {
+  color: #f1f5f9 !important;
+}
+
+.blocklyDropDownContent .blocklyMenuItemHighlight,
+.blocklyDropDownContent .goog-menuitem-highlight {
+  background-color: #e2e8f0 !important;
+}
+
+.dark .blocklyDropDownContent .blocklyMenuItemHighlight,
+.dark .blocklyDropDownContent .goog-menuitem-highlight {
+  background-color: #2a3052 !important;
+}
+
+/* Flyout: lighten/darken the background and category label to match. */
+#scratch_div .blocklyFlyoutBackground {
+  fill: #ffffff;
+  fill-opacity: 0.96;
+}
+
+.dark #scratch_div .blocklyFlyoutBackground {
+  fill: #181818;
+  fill-opacity: 0.96;
+}
+
+#scratch_div .blocklyFlyoutLabelText {
+  fill: #1e293b;
+  font-weight: 700;
+}
+
+.dark #scratch_div .blocklyFlyoutLabelText {
+  fill: #f1f5f9;
+}
+
+/* Hide Blockly's built-in toolbox sidebar visually; we render our own React
+   sidebar over it. The DOM node stays so Blockly's flyout positioning math
+   remains valid — we just zero-width it so the flyout butts against the
+   workspace edge. */
+#scratch_div .blocklyToolboxDiv {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+#scratch_div .blocklyFlyout {
+  z-index: 2;
+}
+
+@media (max-width: 640px) {
+  #scratch_div .blocklyFlyout {
+    max-width: 80vw;
+  }
+}
+
+/* ------- Overlay states -------- */
+
+.bot-builder-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--background) / 0.85);
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  z-index: 2;
+}
+
+.bot-builder-error {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+  border: 1px solid hsl(var(--destructive) / 0.4);
+  font-size: 0.875rem;
+  z-index: 3;
+}

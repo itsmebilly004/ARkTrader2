@@ -2,13 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Maximize2, Minimize2 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { TvChart } from "@/components/tv-chart";
+import { DerivChart } from "@/components/deriv-chart";
 import { TopShell } from "@/components/top-shell";
 import { TradePanel } from "@/components/trade-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-memory";
-import { subscribeTicks, type TradeCategory } from "@/lib/deriv";
-import { isDigitTrade } from "@/lib/trade-types";
+import type { TradeCategory } from "@/lib/deriv";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,6 +21,12 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
+
+function computeChartHeight() {
+  if (typeof window === "undefined") return 380;
+  const narrow = window.innerWidth < 640;
+  return narrow ? 200 : Math.max(380, window.innerHeight - 320);
+}
 
 function Index() {
   const { user } = useAuth();
@@ -50,27 +55,34 @@ function Index() {
   const breachedRef = useRef(false);
   const lossOverlayDismissedRef = useRef(false);
   const isMobile = useIsMobile();
-  const chartHeight = isMobile
-    ? tradeType === "accumulator"
-      ? 182
-      : isDigitTrade(tradeType)
-        ? 164
-        : 172
-    : 380;
+  const [chartHeight, setChartHeight] = useState(() => computeChartHeight());
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Simulated price ticker — feeds lastPrice to TradePanel
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    subscribeTicks(symbol, (tickPrice) => setPrice(tickPrice)).then((fn) => { unsub = fn; });
-    return () => { unsub?.(); };
-  }, [symbol]);
 
   useEffect(() => {
     const remembered = readRememberedMarket(user?.id, "manual");
     if (!remembered) return;
     setSymbol((current) => (current === remembered ? current : remembered));
   }, [user?.id]);
+
+  useEffect(() => {
+    let frame = 0;
+    const compute = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const nextHeight = computeChartHeight();
+        setChartHeight((current) => (current === nextHeight ? current : nextHeight));
+      });
+    };
+    compute();
+    window.addEventListener("resize", compute, { passive: true });
+    window.addEventListener("orientationchange", compute);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("orientationchange", compute);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -116,11 +128,13 @@ function Index() {
       const justBreached = Boolean(next.breached) && !breachedRef.current;
       breachedRef.current = Boolean(next.breached);
 
-      if (nextStatus !== "lost" && lossOverlayTimerRef.current !== null) {
+      // Clear existing overlay timer when status changes away from a flash state
+      const isFlashStatus = nextStatus === "lost" || nextStatus === "sold" || nextStatus === null;
+      if (isFlashStatus && lossOverlayTimerRef.current !== null) {
         window.clearTimeout(lossOverlayTimerRef.current);
         lossOverlayTimerRef.current = null;
       }
-      if (nextStatus !== "lost") lossOverlayDismissedRef.current = false;
+      if (isFlashStatus) lossOverlayDismissedRef.current = false;
 
       if (justBreached) {
         if (barrierFlashTimerRef.current !== null) window.clearTimeout(barrierFlashTimerRef.current);
@@ -130,12 +144,20 @@ function Index() {
         }, 1250);
       }
 
+      // "sold" accumulator: show final profit for 2 s then clear
       if (nextStatus === "sold") {
+        const finalProfit = next.profit ?? null;
+        const showAsWin = (finalProfit ?? 0) >= 0;
         setBarriers((current) => ({
           ...current, ...next,
           breached: justBreached ? true : current.breached,
-          profit: null, profitStatus: null,
+          profit: finalProfit,
+          profitStatus: showAsWin ? "active" : "lost",
         }));
+        lossOverlayTimerRef.current = window.setTimeout(() => {
+          lossOverlayTimerRef.current = null;
+          setBarriers((current) => ({ ...current, profit: null, profitStatus: null }));
+        }, 2000);
         return;
       }
 
@@ -147,6 +169,7 @@ function Index() {
         profitStatus: suppressLostOverlay ? null : nextStatus,
       }));
 
+      // Auto-clear "lost" flash after 2 s (accumulator lost or non-accumulator loss)
       if (nextStatus === "lost" && !lossOverlayDismissedRef.current && lossOverlayTimerRef.current === null) {
         lossOverlayTimerRef.current = window.setTimeout(() => {
           lossOverlayTimerRef.current = null;
@@ -158,6 +181,8 @@ function Index() {
     [],
   );
 
+  void tradeType;
+
   return (
     <TopShell>
       <div
@@ -167,8 +192,8 @@ function Index() {
           height: isMobile ? "calc(100dvh - 11rem)" : "calc(100dvh - 12rem)",
         }}
       >
-        <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[oklch(0.92_0.005_240)] bg-white p-1 sm:p-3 lg:border-b-0 lg:border-r dark:border-[#242424] dark:bg-[#151515]">
-          <div className="mb-1 hidden items-center justify-between sm:mb-2 md:flex">
+        <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-[oklch(0.92_0.005_240)] bg-white lg:border-b-0 lg:border-r dark:border-[#242424] dark:bg-[#151515]">
+          <div className="hidden shrink-0 items-center justify-between px-3 py-2 sm:px-4 md:flex">
             <div>
               <div className="text-sm font-semibold">Manual Trader</div>
               <div className="font-mono text-[11px] text-[oklch(0.55_0.02_260)] dark:text-[#999999]">
@@ -176,18 +201,22 @@ function Index() {
               </div>
             </div>
           </div>
-          <div className="relative min-h-0 flex-1">
-            <TvChart
+          <div className="min-w-0 flex-1 overflow-hidden bg-card p-2 text-card-foreground sm:p-3 dark:bg-[#101010]">
+            <DerivChart
               symbol={symbol}
               onSymbolChange={handleMarketChange}
+              onPrice={setPrice}
               height={chartHeight}
-              showSymbolSelector
+              entryPrice={barriers.entry}
+              highBarrier={barriers.high}
+              lowBarrier={barriers.low}
+              barrierBreached={barriers.breached}
+              accumulatorProfit={barriers.profit}
+              accumulatorProfitCurrency={barriers.profitCurrency}
+              accumulatorProfitStatus={barriers.profitStatus}
               compact={isMobile}
             />
           </div>
-          <p className="mt-2 hidden text-xs text-[oklch(0.5_0.02_260)] sm:block dark:text-[#999999]">
-            Live charts powered by TradingView. Sign in to place real trades.
-          </p>
         </section>
         <aside className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden bg-[oklch(0.97_0.003_240)] p-1.5 pb-1.5 sm:p-3 lg:overflow-y-auto lg:pb-3 dark:bg-[#0e0e0e]">
           <TradePanel

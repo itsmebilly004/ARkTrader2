@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { TopShell } from "@/components/top-shell";
-import { TvChart } from "@/components/tv-chart";
+import { DerivChart } from "@/components/deriv-chart";
 import { useAuth } from "@/hooks/use-auth";
 import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-memory";
 
@@ -60,14 +60,13 @@ function ChartsPage() {
   return (
     <TopShell>
       <div className="min-w-0 bg-card p-2 text-card-foreground sm:p-3 dark:bg-[#101010]">
-        <TvChart
+        <DerivChart
           symbol={symbol}
           onSymbolChange={(nextSymbol) => {
             setSymbol(nextSymbol);
             rememberMarketSelection(user?.id, "charts", nextSymbol);
           }}
           height={chartHeight}
-          showSymbolSelector
         />
       </div>
     </TopShell>

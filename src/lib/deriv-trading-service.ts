@@ -224,6 +224,11 @@ export async function subscribeOpenContract(
     return () => {};
   }
 
+  const isAccumulator = contract.contractType.toUpperCase().includes("ACCU");
+  if (isAccumulator) {
+    return simulateAccumulatorLiveTicks(contractId, contract, onUpdate);
+  }
+
   const delayMs = 1500 + Math.floor(Math.random() * 2000);
   let cancelled = false;
 
@@ -251,6 +256,125 @@ export async function subscribeOpenContract(
   };
 }
 
-export async function sellContract(_contractId: string, _price: number): Promise<DerivMessage> {
-  return { msg_type: "sell", sell: { sold_for: _price } };
+function simulateAccumulatorLiveTicks(
+  contractId: string,
+  contract: ContractEntry,
+  onUpdate: (contract: DerivRecord, message: DerivMessage) => void,
+): () => void {
+  let cancelled = false;
+  const entrySpot = contract.entrySpot;
+  // Barrier distance ~0.038% of spot (typical for 3% growth rate)
+  const barrierDistance = Math.max(entrySpot * 0.00038, 0.0001);
+  const upperBarrier = parseFloat((entrySpot + barrierDistance).toFixed(4));
+  const lowerBarrier = parseFloat((entrySpot - barrierDistance).toFixed(4));
+  // Decide outcome: 8-25 ticks before final resolution
+  const maxTicks = 8 + Math.floor(Math.random() * 18);
+  let tick = 0;
+  let currentSpot = entrySpot;
+  let currentPayout = parseFloat(contract.stake.toFixed(2));
+  const growthPerTick = 0.03 / 100; // ~3% growth rate per tick
+
+  function scheduleNext() {
+    if (cancelled) return;
+    const delay = 700 + Math.floor(Math.random() * 600);
+    setTimeout(sendTick, delay);
+  }
+
+  function sendTick() {
+    if (cancelled) return;
+    tick++;
+
+    // Random walk on spot
+    const step = entrySpot * 0.0003 * (Math.random() * 2 - 1);
+    currentSpot = parseFloat((currentSpot + step).toFixed(4));
+    currentPayout = parseFloat((currentPayout * (1 + growthPerTick)).toFixed(4));
+    const currentProfit = parseFloat((currentPayout - contract.stake).toFixed(2));
+
+    const barrierBreached = currentSpot >= upperBarrier || currentSpot <= lowerBarrier;
+    const isFinalTick = tick >= maxTicks;
+
+    if (barrierBreached || (isFinalTick && !contract.won)) {
+      // Lost: barrier breached
+      const finalProfit = parseFloat((-contract.stake).toFixed(2));
+      const data: DerivRecord = {
+        contract_id: contractId,
+        is_sold: true,
+        status: "lost",
+        profit: finalProfit,
+        payout: 0,
+        entry_spot: entrySpot,
+        exit_spot: currentSpot,
+        current_spot: currentSpot,
+        high_barrier: upperBarrier,
+        low_barrier: lowerBarrier,
+        is_valid_to_sell: 0,
+      };
+      onUpdate(data, { proposal_open_contract: data });
+      void recordTrade(
+        { ...contract, won: false, profit: finalProfit, exitSpot: currentSpot },
+        contract.accountId,
+      );
+      contractCache.delete(contractId);
+      return;
+    }
+
+    if (isFinalTick && contract.won) {
+      // Won: ran long enough
+      const data: DerivRecord = {
+        contract_id: contractId,
+        is_sold: true,
+        status: "sold",
+        profit: currentProfit,
+        payout: currentPayout,
+        entry_spot: entrySpot,
+        exit_spot: currentSpot,
+        current_spot: currentSpot,
+        high_barrier: upperBarrier,
+        low_barrier: lowerBarrier,
+        sell_price: currentPayout,
+        bid_price: currentPayout,
+        is_valid_to_sell: 0,
+      };
+      onUpdate(data, { proposal_open_contract: data });
+      void recordTrade(
+        { ...contract, won: true, profit: currentProfit, payout: currentPayout, exitSpot: currentSpot },
+        contract.accountId,
+      );
+      contractCache.delete(contractId);
+      return;
+    }
+
+    // Still live — emit tick with valid sell price
+    const data: DerivRecord = {
+      contract_id: contractId,
+      is_sold: false,
+      status: "open",
+      profit: currentProfit,
+      payout: currentPayout,
+      entry_spot: entrySpot,
+      current_spot: currentSpot,
+      high_barrier: upperBarrier,
+      low_barrier: lowerBarrier,
+      bid_price: currentPayout,
+      sell_price: currentPayout,
+      is_valid_to_sell: 1,
+      tick_count: tick,
+    };
+    onUpdate(data, { proposal_open_contract: data });
+    scheduleNext();
+  }
+
+  // First tick after short delay
+  setTimeout(sendTick, 600);
+
+  return () => {
+    cancelled = true;
+    contractCache.delete(contractId);
+  };
+}
+
+export async function sellContract(contractId: string, _price: number): Promise<DerivMessage> {
+  // Cancel any pending simulation for this contract
+  contractCache.delete(contractId);
+  return { msg_type: "sell", sell: { sold_for: _price, profit: _price } };
 }
