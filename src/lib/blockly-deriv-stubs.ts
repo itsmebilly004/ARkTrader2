@@ -3,16 +3,19 @@ export function registerDerivStubBlocks(): void {
   if (!B?.Blocks) return;
 
   const stub = (type: string) => {
-    if (!B.Blocks[type]) {
-      B.Blocks[type] = {
-        init(this: any) {
-          this.setColour(160);
-          this.setTooltip(type);
-          this.setPreviousStatement(true, null);
-          this.setNextStatement(true, null);
-        },
-      };
-    }
+    const existing = B.Blocks[type];
+    // Register stub if missing OR if the existing definition has no callable init —
+    // that is the exact condition Blockly's Block constructor checks before it throws
+    // "Invalid block definition for type: X".
+    if (existing && typeof existing === 'object' && typeof existing.init === 'function') return;
+    B.Blocks[type] = {
+      init(this: any) {
+        this.setColour(160);
+        this.setTooltip(type);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+      },
+    };
   };
 
   stub('trade');

@@ -3,7 +3,8 @@
   "private": true,
   "sideEffects": [
     "src/polyfill.ts",
-    "src/styles.css"
+    "src/styles.css",
+    "src/external/bot-skeleton/scratch/**/*.js"
   ],
   "type": "module",
   "engines": {

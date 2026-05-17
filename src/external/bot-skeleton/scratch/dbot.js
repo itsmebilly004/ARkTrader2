@@ -165,6 +165,9 @@ class DBot {
           window.Blockly.getMainWorkspace().current_strategy_id = latest_file.id;
         }
 
+        // Re-apply stubs inside the Promise in case inject or toolbox setup cleared any.
+        registerDerivStubBlocks();
+
         const event_group = `dbot-load${Date.now()}`;
         window.Blockly.Events.setGroup(event_group);
 
