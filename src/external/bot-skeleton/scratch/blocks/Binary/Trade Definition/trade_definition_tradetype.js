@@ -1,7 +1,8 @@
 import { localize } from '@deriv-com/translations';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
+import { enforceLimitations } from './trade_definition_market';
 
-window.Blockly.Blocks.trade_definition_tradetype = {
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Trade Type: {{ trade_type_category }} > {{ trade_type }}', {
@@ -34,7 +35,20 @@ window.Blockly.Blocks.trade_definition_tradetype = {
         excludeOptionFromContextMenu(menu, menu_items);
         modifyContextMenu(menu);
     },
-    enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
+    enforceLimitations,
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradetype = () => {};
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_tradetype = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradetype = () => {};
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_tradetype = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradetype = () => {};
+    }
+}

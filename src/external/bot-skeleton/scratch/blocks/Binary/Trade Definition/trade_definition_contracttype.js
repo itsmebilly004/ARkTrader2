@@ -2,8 +2,9 @@ import { localize } from '@deriv-com/translations';
 import { config } from '../../../../constants/config';
 import { getContractTypeOptions } from '../../../shared';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
+import { enforceLimitations } from './trade_definition_market';
 
-window.Blockly.Blocks.trade_definition_contracttype = {
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Contract Type: {{ contract_type }}', { contract_type: '%1' }),
@@ -18,7 +19,7 @@ window.Blockly.Blocks.trade_definition_contracttype = {
             colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
             colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
             tooltip: localize(
-                'If the contract type is “Both”, then the Purchase Conditions should include both Rise and Fall using the “Conditional Block"'
+                'If the contract type is "Both", then the Purchase Conditions should include both Rise and Fall using the "Conditional Block"'
             ),
             previousStatement: null,
             nextStatement: null,
@@ -65,6 +66,20 @@ window.Blockly.Blocks.trade_definition_contracttype = {
         excludeOptionFromContextMenu(menu, menu_items);
         modifyContextMenu(menu);
     },
-    enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
+    enforceLimitations,
 };
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_contracttype = () => '';
+
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_contracttype = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_contracttype = () => '';
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_contracttype = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_contracttype = () => '';
+    }
+}

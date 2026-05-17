@@ -1,7 +1,8 @@
 import { localize } from '@deriv-com/translations';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
+import { enforceLimitations } from './trade_definition_market';
 
-window.Blockly.Blocks.trade_definition_restartbuysell = {
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Restart buy/sell on error (disable for better performance): {{ checkbox }}', {
@@ -43,7 +44,21 @@ window.Blockly.Blocks.trade_definition_restartbuysell = {
         excludeOptionFromContextMenu(menu, menu_items);
         modifyContextMenu(menu);
     },
-    enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
+    enforceLimitations,
     required_inputs: ['TIME_MACHINE_ENABLED'],
 };
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartbuysell = () => {};
+
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_restartbuysell = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartbuysell = () => {};
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_restartbuysell = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartbuysell = () => {};
+    }
+}

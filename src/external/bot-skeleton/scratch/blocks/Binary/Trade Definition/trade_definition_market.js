@@ -3,7 +3,32 @@ import ApiHelpers from '../../../../services/api/api-helpers';
 import DBotStore from '../../../dbot-store';
 import { excludeOptionFromContextMenu, modifyContextMenu, runIrreversibleEvents } from '../../../utils';
 /* eslint-disable */
-window.Blockly.Blocks.trade_definition_market = {
+
+// Exported so sibling blocks can reference it directly without going through
+// window.Blockly.Blocks (which may not be populated yet at module-eval time).
+export function enforceLimitations() {
+    runIrreversibleEvents(() => {
+        if (!this.isDescendantOf('trade_definition')) {
+            this.unplug(false);
+
+            const top_blocks = this.workspace.getTopBlocks();
+            const trade_definition_block = top_blocks.find(block => block.type === 'trade_definition');
+
+            if (trade_definition_block) {
+                const connection = trade_definition_block.getLastConnectionInStatement('TRADE_OPTIONS');
+                if (connection) {
+                    connection.connect(this.previousConnection);
+                }
+            } else {
+                this.dispose();
+            }
+        } else if (this.disabled) {
+            this.setDisabled(false);
+        }
+    });
+}
+
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Market: {{ input_market }} > {{ input_submarket }} > {{ input_symbol }}', {
@@ -108,30 +133,20 @@ window.Blockly.Blocks.trade_definition_market = {
             }
         }
     },
-    enforceLimitations() {
-        runIrreversibleEvents(() => {
-            if (!this.isDescendantOf('trade_definition')) {
-                this.unplug(false); // Unplug without reconnecting siblings
-
-                const top_blocks = this.workspace.getTopBlocks();
-                const trade_definition_block = top_blocks.find(block => block.type === 'trade_definition');
-
-                // Reconnect self to trade definition block.
-                if (trade_definition_block) {
-                    const connection = trade_definition_block.getLastConnectionInStatement('TRADE_OPTIONS');
-                    if (connection) {
-                        connection.connect(this.previousConnection);
-                    }
-                } else {
-                    this.dispose();
-                }
-            }
-            // These blocks cannot be disabled.
-            else if (this.disabled) {
-                this.setDisabled(false);
-            }
-        });
-    },
+    enforceLimitations,
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_market = () => {};
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_market = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_market = () => {};
+    }
+}
+
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_market = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_market = () => {};
+}

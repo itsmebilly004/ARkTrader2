@@ -51,8 +51,10 @@ export const loadBlockly = async isDarkMode => {
         console.error('[loadBlockly] failed while loading custom blocks barrel:', err);
         throw err;
     }
-    // Post-condition: every block type referenced by main.xml must be registered.
-    // If any one is missing, the import chain quietly half-succeeded.
+
+    // Fallback: if Vite module-preload evaluated block files before window.Blockly was
+    // set, the module-level assignments silently no-oped. Explicitly call each block's
+    // registerBlock() so they run now that window.Blockly is fully configured.
     const required = [
         'trade_definition',
         'trade_definition_market',
@@ -62,6 +64,32 @@ export const loadBlockly = async isDarkMode => {
         'trade_definition_restartbuysell',
         'trade_definition_restartonerror',
     ];
+    const preCheck = required.filter(t => !window.Blockly?.Blocks?.[t]);
+    if (preCheck.length > 0) {
+        try {
+            const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
+                import('./blocks/Binary/Trade Definition/trade_definition'),
+                import('./blocks/Binary/Trade Definition/trade_definition_market'),
+                import('./blocks/Binary/Trade Definition/trade_definition_tradetype'),
+                import('./blocks/Binary/Trade Definition/trade_definition_contracttype'),
+                import('./blocks/Binary/Trade Definition/trade_definition_candleinterval'),
+                import('./blocks/Binary/Trade Definition/trade_definition_restartbuysell'),
+                import('./blocks/Binary/Trade Definition/trade_definition_restartonerror'),
+            ]);
+            // Register in dependency order (market must precede tradetype/contracttype etc.)
+            r1.registerBlock?.();
+            r2.registerBlock?.();
+            r3.registerBlock?.();
+            r4.registerBlock?.();
+            r5.registerBlock?.();
+            r6.registerBlock?.();
+            r7.registerBlock?.();
+        } catch (regErr) {
+            // eslint-disable-next-line no-console
+            console.error('[loadBlockly] explicit block re-registration failed:', regErr);
+        }
+    }
+
     const missing = required.filter(t => !window.Blockly?.Blocks?.[t]);
     if (missing.length > 0) {
         // eslint-disable-next-line no-console

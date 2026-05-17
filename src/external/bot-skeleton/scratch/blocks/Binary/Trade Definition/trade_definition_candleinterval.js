@@ -1,8 +1,9 @@
 import { localize } from '@deriv-com/translations';
 import { config } from '../../../../constants/config';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
+import { enforceLimitations } from './trade_definition_market';
 
-window.Blockly.Blocks.trade_definition_candleinterval = {
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Default Candle Interval: {{ candle_interval_type }}', { candle_interval_type: '%1' }),
@@ -35,6 +36,20 @@ window.Blockly.Blocks.trade_definition_candleinterval = {
         excludeOptionFromContextMenu(menu, menu_items);
         modifyContextMenu(menu);
     },
-    enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
+    enforceLimitations,
 };
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_candleinterval = () => {};
+
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_candleinterval = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_candleinterval = () => {};
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_candleinterval = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_candleinterval = () => {};
+    }
+}

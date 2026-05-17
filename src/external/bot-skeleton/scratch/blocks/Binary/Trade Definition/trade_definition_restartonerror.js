@@ -1,7 +1,8 @@
 import { localize } from '@deriv-com/translations';
 import { excludeOptionFromContextMenu, modifyContextMenu } from '../../../utils';
+import { enforceLimitations } from './trade_definition_market';
 
-window.Blockly.Blocks.trade_definition_restartonerror = {
+const _blockDef = {
     init() {
         this.jsonInit({
             message0: localize('Restart last trade on error (bot ignores the unsuccessful trade): {{ checkbox }}', {
@@ -38,8 +39,21 @@ window.Blockly.Blocks.trade_definition_restartonerror = {
         excludeOptionFromContextMenu(menu, menu_items);
         modifyContextMenu(menu);
     },
-    enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
+    enforceLimitations,
     required_inputs: ['RESTARTONERROR'],
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartonerror = () => {};
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition_restartonerror = _blockDef;
+}
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartonerror = () => {};
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition_restartonerror = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_restartonerror = () => {};
+    }
+}

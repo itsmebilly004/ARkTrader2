@@ -10,7 +10,7 @@ import {
 } from '../../../utils';
 import { defineContract } from '../../images';
 
-window.Blockly.Blocks.trade_definition = {
+const _blockDef = {
     init() {
         this.jsonInit(this.definition());
         this.setDeletable(false);
@@ -159,7 +159,11 @@ window.Blockly.Blocks.trade_definition = {
     },
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block => {
+if (window.Blockly?.Blocks) {
+    window.Blockly.Blocks.trade_definition = _blockDef;
+}
+
+const _generatorFn = block => {
     const { client } = DBotStore.instance;
 
     if (!client || !client.is_logged_in) {
@@ -209,3 +213,15 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
       };\n`;
     return code;
 };
+
+if (window.Blockly?.JavaScript?.javascriptGenerator?.forBlock) {
+    window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = _generatorFn;
+}
+
+export function registerBlock() {
+    if (!window.Blockly?.Blocks) return;
+    window.Blockly.Blocks.trade_definition = _blockDef;
+    if (window.Blockly.JavaScript?.javascriptGenerator?.forBlock) {
+        window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = _generatorFn;
+    }
+}

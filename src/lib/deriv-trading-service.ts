@@ -272,7 +272,7 @@ function simulateAccumulatorLiveTicks(
   let tick = 0;
   let currentSpot = entrySpot;
   let currentPayout = parseFloat(contract.stake.toFixed(2));
-  const growthPerTick = 0.03 / 100; // ~3% growth rate per tick
+  const growthPerTick = 0.03; // 3% growth rate per tick
 
   function scheduleNext() {
     if (cancelled) return;
