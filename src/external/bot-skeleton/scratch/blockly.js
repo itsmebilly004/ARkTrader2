@@ -44,6 +44,10 @@ export const loadBlockly = async isDarkMode => {
     modifyBlocklyWorkSpaceContextMenu();
     setColors(isDarkMode);
     await import('./hooks/index.js');
+    if (!window.Blockly.Categories) {
+        const { registerConstants } = await import('./hooks/constant.js');
+        registerConstants();
+    }
     try {
         await import('./blocks');
     } catch (err) {
