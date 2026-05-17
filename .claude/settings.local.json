@@ -44,7 +44,9 @@
       "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\stores\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
       "Bash(cp -r \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\assets\\\\arktrader-hub\\\\src\\\\external\\\\xml\" \"C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external/\")",
       "Bash(python3 *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(grep -v \"Binary\\\\\\\\|scratch\\\\\\\\|external\\\\\\\\|\\\\.d\\\\.ts\")",
+      "Bash(findstr /S /R \"Blockly\\\\.inject\\\\|loadBlockly\\\\|initWorkspace\" C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external\\\\bot-skeleton\\\\scratch\\\\dbot.js)"
     ]
   }
 }

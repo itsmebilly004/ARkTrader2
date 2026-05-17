@@ -15,6 +15,7 @@ import { getSavedWorkspaces, saveWorkspaceToRecent } from "../utils/local-storag
 import { isDbotRTL } from "../utils/workspace";
 import main_xml from "./xml/main.xml?raw";
 import { loadBlockly } from "./blockly";
+import { registerDerivStubBlocks } from "@/lib/blockly-deriv-stubs";
 import DBotStore from "./dbot-store";
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from "./utils";
 
@@ -32,6 +33,7 @@ class DBot {
    */
   async initWorkspace(public_path, store, api_helpers_store, is_mobile, is_dark_mode) {
     await loadBlockly(is_dark_mode);
+    registerDerivStubBlocks();
     const recent_files = await getSavedWorkspaces();
 
     // Lightweight onchange for trade_definition_tradetype: refresh dropdowns
@@ -165,6 +167,23 @@ class DBot {
 
         const event_group = `dbot-load${Date.now()}`;
         window.Blockly.Events.setGroup(event_group);
+
+        // Diagnostic: surface any XML block types still missing after stub registration.
+        try {
+          const _xmlDoc = new DOMParser().parseFromString(
+            window.Blockly.derivWorkspace.strategy_to_load,
+            'text/xml',
+          );
+          const _allTypes = [..._xmlDoc.querySelectorAll('block')]
+            .map(b => b.getAttribute('type'))
+            .filter(Boolean);
+          const _unregistered = _allTypes.filter(t => !window.Blockly.Blocks[t]);
+          if (_unregistered.length > 0) {
+            // eslint-disable-next-line no-console
+            console.warn('[Blockly] Unregistered block types found:', [...new Set(_unregistered)]);
+          }
+        } catch { /* noop — diagnostic only */ }
+
         window.Blockly.Xml.domToWorkspace(
           window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
           this.workspace,
