@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "cp -r node_modules/blockly/media public/blockly-media && vite build",
+    "build": "mkdir -p public/blockly-media && cp -r node_modules/blockly/media/. public/blockly-media && vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

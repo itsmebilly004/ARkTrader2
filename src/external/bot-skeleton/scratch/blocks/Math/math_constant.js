@@ -42,6 +42,7 @@ window.Blockly.Blocks.math_constant = {
     },
 };
 
+
 window.Blockly.JavaScript.javascriptGenerator.forBlock.math_constant = block => {
     const constant = block.getFieldValue('CONSTANT');
 
