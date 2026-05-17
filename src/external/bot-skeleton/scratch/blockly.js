@@ -48,6 +48,10 @@ export const loadBlockly = async isDarkMode => {
         const { registerConstants } = await import('./hooks/constant.js');
         registerConstants();
     }
+    if (!window.Blockly.Block.prototype.isDescendantOf) {
+        const { registerBlockHooks } = await import('./hooks/block.js');
+        registerBlockHooks();
+    }
     try {
         await import('./blocks');
     } catch (err) {

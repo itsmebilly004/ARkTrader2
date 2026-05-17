@@ -30,6 +30,13 @@ const _blockDef = {
         this.setMovable(false);
         this.setDeletable(false);
     },
+    onchange(event) {
+        if (!this.workspace || window.Blockly.derivWorkspace.isFlyoutVisible || this.workspace.isDragging()) {
+            return;
+        }
+        if (/^dbot-load/.test(event?.group ?? '')) return;
+        this.enforceLimitations();
+    },
     customContextMenu(menu) {
         const menu_items = [localize('Enable Block'), localize('Disable Block')];
         excludeOptionFromContextMenu(menu, menu_items);

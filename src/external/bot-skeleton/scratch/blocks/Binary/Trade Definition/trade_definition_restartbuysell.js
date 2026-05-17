@@ -32,11 +32,11 @@ const _blockDef = {
             }
         });
     },
-    onchange(/* event */) {
+    onchange(event) {
         if (!this.workspace || window.Blockly.derivWorkspace.isFlyoutVisible || this.workspace.isDragging()) {
             return;
         }
-
+        if (/^dbot-load/.test(event?.group ?? '')) return;
         this.enforceLimitations();
     },
     customContextMenu(menu) {

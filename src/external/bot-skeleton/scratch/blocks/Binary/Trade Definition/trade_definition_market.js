@@ -82,7 +82,9 @@ const _blockDef = {
             return;
         }
 
-        this.enforceLimitations();
+        if (!/^dbot-load/.test(event?.group ?? '')) {
+            this.enforceLimitations();
+        }
 
         const { active_symbols } = ApiHelpers?.instance ?? {};
         if (!active_symbols) return;

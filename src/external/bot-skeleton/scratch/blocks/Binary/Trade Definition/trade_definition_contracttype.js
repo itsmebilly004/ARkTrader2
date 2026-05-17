@@ -32,9 +32,10 @@ const _blockDef = {
             return;
         }
 
-        this.enforceLimitations();
-
-        const is_load_event = /^dbot-load/.test(event.group);
+        const is_load_event = /^dbot-load/.test(event?.group ?? '');
+        if (!is_load_event) {
+            this.enforceLimitations();
+        }
 
         if (event.type === window.Blockly.Events.BLOCK_CHANGE) {
             if (event.name === 'TRADETYPE_LIST') {
