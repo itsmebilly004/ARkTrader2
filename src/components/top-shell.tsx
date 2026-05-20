@@ -4,31 +4,11 @@ import { Button } from "@/components/ui/button";
 import { AiAssistant } from "@/components/ai-assistant";
 import {
   BotRunMonitorPanel,
-  DEFAULT_BOT_MONITOR_JOURNAL,
-  EMPTY_BOT_MONITOR_STATS,
-  type BotMonitorJournalEntry,
-  type BotMonitorStats,
-  type BotMonitorStatus,
-  type BotMonitorTransaction,
 } from "@/components/bot-run-monitor";
 import { useAuth } from "@/hooks/use-auth";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
+import { useBotRunner } from "@/context/bot-runner-context";
 import { useTheme } from "@/hooks/use-theme";
-import {
-  persistBotMonitorSnapshot,
-  readBotMonitorSnapshot,
-  updateTrackedTrade,
-  upsertTrackedTrade,
-} from "@/lib/activity-memory";
-import {
-  ensureDerivTradingConnection,
-  getDerivTradingErrorMessage,
-  type TradeCategory,
-  type TradingAdapter,
-} from "@/lib/deriv";
-import { resolveRunnableBotSettings, type BotBuilderSettings } from "@/lib/bot-builder-state";
-import { buyProposal, requestProposal, subscribeOpenContract } from "@/lib/deriv-trading-service";
-import { buildStandardProposalPayload, type ProposalInput } from "@/lib/trade-proposal-builder";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -53,10 +33,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { type DerivAccount } from "@/hooks/use-deriv-balance";
-import { numberFrom } from "@/lib/contract-state";
 import { isDemoAccount } from "@/lib/deriv-account";
 
 const CURRENCY_META: Record<string, { country?: string; name: string; symbol?: string }> = {
@@ -117,18 +96,6 @@ export const TOP_TABS: TabDef[] = [
   { to: "/copy-trading", label: "Copy Trading", icon: Users },
 ];
 
-const BOT_TRADE_MAX_ATTEMPTS = 2;
-const DERIV_TEMPORARY_PROCESSING_MESSAGE =
-  "Sorry, an error occurred while processing your request.";
-
-type Settlement = {
-  entrySpot: number | null;
-  exitSpot: number | null;
-  payout: number;
-  profit: number;
-  status: "lost" | "open" | "won";
-};
-
 export function TopShell({
   children,
   showAssistantButton = true,
@@ -143,20 +110,12 @@ export function TopShell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { account, accounts, balance, currency, loading: balanceLoading, refreshing, refreshBalances, switchAccount } =
     useDerivBalanceContext();
+  const runner = useBotRunner();
   const { theme, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeAccountTab, setActiveAccountTab] = useState<"real" | "demo">("real");
   const [botMonitorCollapsed, setBotMonitorCollapsed] = useState(true);
   const [botMonitorTab, setBotMonitorTab] = useState("summary");
-  const [botMonitorStatus, setBotMonitorStatus] = useState<BotMonitorStatus>("stopped");
-  const [botMonitorStats, setBotMonitorStats] = useState<BotMonitorStats>(EMPTY_BOT_MONITOR_STATS);
-  const [botMonitorTransactions, setBotMonitorTransactions] = useState<BotMonitorTransaction[]>([]);
-  const [botMonitorJournal, setBotMonitorJournal] = useState<BotMonitorJournalEntry[]>(
-    DEFAULT_BOT_MONITOR_JOURNAL,
-  );
-  const [botMonitorMemoryReady, setBotMonitorMemoryReady] = useState(false);
-  const footerBotRunningRef = useRef(false);
-  const footerBotStatsRef = useRef(EMPTY_BOT_MONITOR_STATS);
 
   const realAccounts = useMemo(
     () => accounts.filter((account) => account.normalizedType === "real"),
@@ -174,44 +133,13 @@ export function TopShell({
     setActiveAccountTab(account.normalizedType);
   }, [account, dropdownOpen]);
 
+  // Auto-expand footer monitor when a bot starts running (e.g. from the bot-builder page).
   useEffect(() => {
-    footerBotStatsRef.current = botMonitorStats;
-  }, [botMonitorStats]);
-
-  useEffect(() => {
-    const snapshot = readBotMonitorSnapshot(user?.id);
-    if (!snapshot) {
-      setBotMonitorStatus("stopped");
-      setBotMonitorStats(EMPTY_BOT_MONITOR_STATS);
-      setBotMonitorTransactions([]);
-      setBotMonitorJournal(DEFAULT_BOT_MONITOR_JOURNAL);
-      setBotMonitorMemoryReady(true);
-      return;
+    if (runner.status === "running") {
+      setBotMonitorCollapsed(false);
+      setBotMonitorTab("summary");
     }
-    setBotMonitorStatus(snapshot.status);
-    setBotMonitorStats(snapshot.stats);
-    setBotMonitorTransactions(snapshot.transactions);
-    setBotMonitorJournal(snapshot.journal.length ? snapshot.journal : DEFAULT_BOT_MONITOR_JOURNAL);
-    setBotMonitorMemoryReady(true);
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!botMonitorMemoryReady) return;
-    persistBotMonitorSnapshot(user?.id, {
-      journal: botMonitorJournal,
-      stats: botMonitorStats,
-      status: botMonitorStatus,
-      transactions: botMonitorTransactions,
-      updatedAt: new Date().toISOString(),
-    });
-  }, [
-    botMonitorJournal,
-    botMonitorMemoryReady,
-    botMonitorStats,
-    botMonitorStatus,
-    botMonitorTransactions,
-    user?.id,
-  ]);
+  }, [runner.status]);
 
 
   async function handleLogout() {
@@ -233,232 +161,9 @@ export function TopShell({
     }
   }
 
-  function addFooterBotJournal(
-    message: string,
-    type: BotMonitorJournalEntry["type"] = "info",
-  ) {
-    setBotMonitorJournal((current) => [
-      { id: crypto.randomUUID(), message, time: formatTime(), type },
-      ...current,
-    ]);
-  }
-
-  function resetFooterBotMonitor() {
-    footerBotRunningRef.current = false;
-    setBotMonitorStatus("stopped");
-    setBotMonitorStats(EMPTY_BOT_MONITOR_STATS);
-    setBotMonitorTransactions([]);
-    setBotMonitorJournal(DEFAULT_BOT_MONITOR_JOURNAL);
-    setBotMonitorTab("summary");
-  }
-
   async function handleFooterBotRun() {
-    if (botMonitorStatus === "running") {
-      footerBotRunningRef.current = false;
-      setBotMonitorStatus("stopped");
-      addFooterBotJournal(
-        "Stop requested. The bot will stop after the current contract settles.",
-        "warning",
-      );
-      return;
-    }
-
-    const settings = resolveRunnableBotSettings(user?.id);
-    if (!settings) {
-      navigate({ to: "/bot-builder" });
-      return;
-    }
-
-    if (!account) {
-      toast.error("Connect and select a Deriv account before running the bot.");
-      addFooterBotJournal("Run blocked: no Deriv account selected.", "error");
-      return;
-    }
-
-    footerBotRunningRef.current = true;
-    setBotMonitorStatus("running");
-    setBotMonitorTab("summary");
-    setBotMonitorCollapsed(false);
-    addFooterBotJournal("Bot run started.", "success");
-
-    try {
-      const session = await ensureDerivTradingConnection(account, { context: "footer-bot-run" });
-      const runCurrency = currency || account.currency || settings.currency;
-      const context = {
-        adapter: session.adapter,
-        contractType: contractTypeLabel(settings),
-        selectedAccountId: session.account_id,
-        selectedAccountType: session.normalizedType,
-      };
-      let currentStake = settings.stake;
-      let runningProfit = footerBotStatsRef.current.totalProfitLoss;
-
-      for (let index = 0; footerBotRunningRef.current && index < settings.maxRuns; index += 1) {
-        const snapshot = { ...settings, currency: runCurrency };
-        const stake = clampNumber(currentStake, 0.35, snapshot.maxStake);
-        if (!conditionAllowsTrade(snapshot, stake, index + 1, runningProfit)) {
-          addFooterBotJournal(
-            "Purchase condition is false. Waiting for the next run cycle.",
-            "warning",
-          );
-          if (!snapshot.tradeEveryTick) break;
-          await sleep(700);
-          continue;
-        }
-
-        const input = proposalInput(snapshot, stake);
-        let settlement: Settlement | null = null;
-        let tradeError: unknown = null;
-        for (let attempt = 1; attempt <= BOT_TRADE_MAX_ATTEMPTS; attempt += 1) {
-          let contractWasBought = false;
-          try {
-            const payload = buildStandardProposalPayload(input, session.adapter as TradingAdapter);
-            addFooterBotJournal(
-              `Requesting proposal for ${contractTypeLabel(snapshot)} with ${stake.toFixed(2)} ${snapshot.currency}.`,
-            );
-            const proposal = await requestProposal(payload, {
-              ...context,
-              contractType: String(payload.contract_type ?? context.contractType),
-            });
-            const proposalId = String(proposal.proposal?.id ?? "");
-            const askPrice = positiveNumberFrom(proposal.proposal?.ask_price, stake) ?? stake;
-            const buy = await buyProposal(proposalId, askPrice, {
-              ...context,
-              contractType: String(payload.contract_type ?? context.contractType),
-            });
-            const contractId = String(buy.buy?.contract_id ?? "");
-            contractWasBought = true;
-            const record: BotMonitorTransaction = {
-              contractId,
-              entrySpot: null,
-              exitSpot: null,
-              id: crypto.randomUUID(),
-              payout: 0,
-              profit: 0,
-              stake,
-              status: "open",
-              time: formatTime(),
-            };
-            setBotMonitorTransactions((items) => [record, ...items]);
-            upsertTrackedTrade(user?.id, {
-              contractId,
-              contractType: String(payload.contract_type ?? context.contractType),
-              currency: snapshot.currency,
-              id: record.id,
-              market: snapshot.symbol,
-              openedAt: new Date().toISOString(),
-              payout: 0,
-              profitLoss: 0,
-              source: "bot-footer",
-              stake,
-              status: "open",
-            });
-            addFooterBotJournal(`Bought contract ${contractId}. Waiting for settlement.`, "success");
-            settlement = await waitForSettlement(contractId);
-
-            setBotMonitorTransactions((items) =>
-              items.map((item) =>
-                item.id === record.id
-                  ? {
-                      ...item,
-                      entrySpot: settlement?.entrySpot ?? null,
-                      exitSpot: settlement?.exitSpot ?? null,
-                      payout: settlement?.payout ?? 0,
-                      profit: settlement?.profit ?? 0,
-                      status: settlement?.status ?? "open",
-                    }
-                  : item,
-              ),
-            );
-            updateTrackedTrade(user?.id, contractId, {
-              closedAt: new Date().toISOString(),
-              payout: settlement?.payout ?? 0,
-              profitLoss: settlement?.profit ?? 0,
-              status:
-                settlement?.status === "won"
-                  ? "won"
-                  : settlement?.status === "lost"
-                    ? "lost"
-                    : "open",
-            });
-            tradeError = null;
-            break;
-          } catch (error) {
-            tradeError = error;
-            if (
-              !contractWasBought &&
-              attempt < BOT_TRADE_MAX_ATTEMPTS &&
-              shouldRetryBotTrade(error)
-            ) {
-              addFooterBotJournal(
-                "Deriv returned a temporary processing error. Retrying once.",
-                "warning",
-              );
-              await sleep(1500);
-              continue;
-            }
-            break;
-          }
-        }
-
-        if (!settlement) {
-          const message = getDerivTradingErrorMessage(tradeError);
-          if (snapshot.restartBuySellOnError || snapshot.restartLastTradeOnError) {
-            addFooterBotJournal(
-              `Skipped one bot run after Deriv rejected the trade: ${message}`,
-              "warning",
-            );
-            await sleep(700);
-            continue;
-          }
-          throw tradeError;
-        }
-
-        runningProfit += settlement.profit;
-        setBotMonitorStats((current) => ({
-          contractsLost: current.contractsLost + (settlement.status === "lost" ? 1 : 0),
-          contractsWon: current.contractsWon + (settlement.status === "won" ? 1 : 0),
-          runs: current.runs + 1,
-          totalPayout: current.totalPayout + settlement.payout,
-          totalProfitLoss: current.totalProfitLoss + settlement.profit,
-          totalStake: current.totalStake + stake,
-        }));
-        addFooterBotJournal(
-          `Contract settled ${settlement.status}. P/L ${settlement.profit.toFixed(2)} ${snapshot.currency}.`,
-          settlement.status === "won"
-            ? "success"
-            : settlement.status === "lost"
-              ? "warning"
-              : "info",
-        );
-        await refreshBalances("footer-bot-trade-complete", account.account_id).catch((error) => {
-          console.warn("[Top Shell] balance refresh after settled trade failed", error);
-        });
-
-        if (runningProfit >= snapshot.takeProfit || runningProfit <= -Math.abs(snapshot.stopLoss)) {
-          addFooterBotJournal("Profit or loss threshold reached. Bot stopped.", "warning");
-          break;
-        }
-        currentStake =
-          settlement.status === "lost"
-            ? clampNumber(stake * snapshot.martingale, 0.35, snapshot.maxStake)
-            : snapshot.stake;
-        if (!snapshot.tradeEveryTick) await sleep(1000);
-      }
-
-      await refreshBalances("footer-bot-run-complete", account.account_id).catch((error) => {
-        console.warn("[Top Shell] final balance refresh after run failed", error);
-      });
-      setBotMonitorStatus("stopped");
-      footerBotRunningRef.current = false;
-      addFooterBotJournal("Bot run completed.", "success");
-    } catch (error) {
-      const message = getDerivTradingErrorMessage(error);
-      footerBotRunningRef.current = false;
-      setBotMonitorStatus("error");
-      addFooterBotJournal(message, "error");
-      toast.error(message);
-    }
+    if (runner.status !== "running") setBotMonitorTab("summary");
+    await runner.startBot();
   }
 
   return (
@@ -676,17 +381,18 @@ export function TopShell({
         <BotRunMonitorPanel
           activeTab={botMonitorTab}
           collapsed={botMonitorCollapsed}
+          connecting={runner.connecting}
           currency={currency || account?.currency || "USD"}
-          journal={botMonitorJournal}
+          journal={runner.journal}
           mode="footer"
-          onReset={resetFooterBotMonitor}
+          onReset={runner.resetRunner}
           onRun={handleFooterBotRun}
           onToggleCollapse={() => setBotMonitorCollapsed((value) => !value)}
           setActiveTab={setBotMonitorTab}
-          stats={botMonitorStats}
-          status={botMonitorStatus}
+          stats={runner.stats}
+          status={runner.status}
           title="Bot monitor"
-          transactions={botMonitorTransactions}
+          transactions={runner.transactions}
         />
       )}
 
@@ -697,200 +403,6 @@ export function TopShell({
   );
 }
 
-function tradeCategory(settings: BotBuilderSettings): TradeCategory {
-  if (settings.tradeType === "digits") return settings.digitContract;
-  return settings.tradeType;
-}
-
-function contractTypeLabel(settings: BotBuilderSettings) {
-  const familyLabel =
-    settings.tradeType === "digits"
-      ? settings.digitContract === "even_odd"
-        ? "Even/Odd"
-        : settings.digitContract === "matches_differs"
-          ? "Matches/Differs"
-          : "Over/Under"
-      : settings.tradeType === "higher_lower"
-        ? "Higher/Lower"
-        : settings.tradeType === "rise_fall"
-          ? "Rise/Fall"
-          : settings.tradeType === "touch_no_touch"
-            ? "Touch/No Touch"
-            : "Multiplier";
-  const directionLabel =
-    settings.purchaseDirection === "odd"
-      ? "Odd"
-      : settings.purchaseDirection === "even"
-        ? "Even"
-        : settings.purchaseDirection === "matches"
-          ? "Matches"
-          : settings.purchaseDirection === "differs"
-            ? "Differs"
-            : settings.purchaseDirection === "under"
-              ? "Under"
-              : settings.purchaseDirection === "over"
-                ? "Over"
-                : settings.purchaseDirection === "higher"
-                  ? "Higher"
-                  : settings.purchaseDirection === "lower"
-                    ? "Lower"
-                    : settings.purchaseDirection === "touch"
-                      ? "Touch"
-                      : settings.purchaseDirection === "no_touch"
-                        ? "No Touch"
-                        : settings.purchaseDirection === "up"
-                          ? "Rise"
-                          : settings.purchaseDirection === "down"
-                            ? "Fall"
-                            : settings.purchaseDirection;
-  return `${familyLabel} / ${directionLabel}`;
-}
-
-function proposalInput(settings: BotBuilderSettings, stake: number): ProposalInput {
-  return {
-    barrier:
-      tradeCategory(settings) === "higher_lower" || tradeCategory(settings) === "touch_no_touch"
-        ? "+0.10"
-        : String(settings.selectedDigit),
-    currency: settings.currency,
-    duration: settings.duration,
-    durationUnit: settings.durationUnit,
-    market: settings.symbol,
-    multiplier: 100,
-    payoutMode: "stake",
-    selectedDigit: settings.selectedDigit,
-    side: settings.purchaseDirection,
-    stake,
-    stopLoss: settings.stopLoss,
-    takeProfit: settings.takeProfit,
-    tradeType: tradeCategory(settings),
-  };
-}
-
-function conditionAllowsTrade(
-  settings: BotBuilderSettings,
-  stake: number,
-  runNumber: number,
-  totalProfit: number,
-) {
-  const leftValue =
-    settings.conditionLeft === "Total Profit"
-      ? totalProfit
-      : settings.conditionLeft === "Stake"
-        ? stake
-        : settings.conditionLeft === "Run Count"
-          ? runNumber
-          : settings.selectedDigit;
-  const rightValue = Number(settings.conditionRight);
-  if (settings.conditionOperator === "contains") {
-    return settings.conditionRight
-      .split(",")
-      .map((item) => item.trim())
-      .includes(String(leftValue));
-  }
-  if (!Number.isFinite(rightValue)) return true;
-  if (settings.conditionOperator === ">") return leftValue > rightValue;
-  if (settings.conditionOperator === "<") return leftValue < rightValue;
-  return leftValue === rightValue;
-}
-
-async function waitForSettlement(contractId: string): Promise<Settlement> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let unsubscribe: (() => Promise<void>) | undefined;
-    const timeout = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve({ entrySpot: null, exitSpot: null, payout: 0, profit: 0, status: "open" });
-      void unsubscribe?.();
-    }, 45000);
-
-    subscribeOpenContract(contractId, (contract) => {
-      const statusText = String(contract.status ?? "").toLowerCase();
-      const isSold =
-        contract.is_sold === 1 ||
-        contract.is_sold === true ||
-        contract.is_expired === 1 ||
-        contract.is_expired === true ||
-        statusText === "won" ||
-        statusText === "lost" ||
-        statusText === "sold";
-      if (!isSold || settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      const entrySpot = numberFrom(
-        contract.entry_spot,
-        contract.entry_tick,
-        contract.entry_tick_display_value,
-      );
-      const exitSpot = numberFrom(
-        contract.exit_spot,
-        contract.exit_tick,
-        contract.exit_tick_display_value,
-        contract.sell_spot,
-        contract.current_spot,
-        contract.current_tick,
-        contract.current_spot_display_value,
-      );
-      const profit = Number(contract.profit ?? 0);
-      const payout = Number(contract.payout ?? contract.sell_price ?? contract.bid_price ?? 0);
-      resolve({
-        entrySpot,
-        exitSpot,
-        payout: Number.isFinite(payout) ? payout : 0,
-        profit: Number.isFinite(profit) ? profit : 0,
-        status: profit >= 0 ? "won" : "lost",
-      });
-      void unsubscribe?.();
-    })
-      .then((off) => {
-        unsubscribe = off;
-      })
-      .catch((error) => {
-        window.clearTimeout(timeout);
-        reject(error);
-      });
-  });
-}
-
-function sleep(milliseconds: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-function shouldRetryBotTrade(error: unknown) {
-  const message = getDerivTradingErrorMessage(error).toLowerCase();
-  const code = String((error as { code?: unknown })?.code ?? "").toLowerCase();
-  return (
-    message.includes(DERIV_TEMPORARY_PROCESSING_MESSAGE.toLowerCase()) ||
-    message.includes("timed out") ||
-    code.includes("internal") ||
-    code.includes("rate") ||
-    code.includes("timeout")
-  );
-}
-
-function positiveNumberFrom(...values: unknown[]) {
-  for (const value of values) {
-    if (value == null || value === "") continue;
-    const number = Number(value);
-    if (Number.isFinite(number) && number > 0) return number;
-  }
-  return null;
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return min;
-  return Math.min(max, Math.max(min, number));
-}
-
-function formatTime() {
-  return new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 function AccountList({
   accounts,

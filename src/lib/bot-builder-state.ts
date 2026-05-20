@@ -437,8 +437,74 @@ export function settingsFromBotPreset(preset: BotPresetConfig): BotBuilderSettin
   });
 }
 
-export function resolveRunnableBotSettings(userId?: string | null) {
-  return readCurrentBotSettings(userId) ?? (userId ? readCurrentBotSettings(null) : null);
+// ─── User-override storage ────────────────────────────────────────────────────
+// The BotSettingsPanel form writes to this key. Values here win over whatever
+// the Blockly XML extraction produces, so form edits are always honoured.
+
+export type UserBotOverrides = {
+  martingale?: number;
+  maxRuns?: number;
+  maxStake?: number;
+  stake?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+};
+
+function userBotOverridesStorageKey(userId?: string | null) {
+  return `arktrader:bot-builder:${userId ?? "guest"}:user-overrides`;
+}
+
+export function persistUserBotOverrides(
+  userId: string | null | undefined,
+  overrides: UserBotOverrides,
+) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      userBotOverridesStorageKey(userId),
+      JSON.stringify(overrides),
+    );
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function readUserBotOverrides(userId?: string | null): UserBotOverrides | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(userBotOverridesStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) return null;
+    const out: UserBotOverrides = {};
+    if (typeof parsed.stake === "number") out.stake = parsed.stake;
+    if (typeof parsed.martingale === "number") out.martingale = parsed.martingale;
+    if (typeof parsed.maxStake === "number") out.maxStake = parsed.maxStake;
+    if (typeof parsed.stopLoss === "number") out.stopLoss = parsed.stopLoss;
+    if (typeof parsed.takeProfit === "number") out.takeProfit = parsed.takeProfit;
+    if (typeof parsed.maxRuns === "number") out.maxRuns = parsed.maxRuns;
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearUserBotOverrides(userId?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(userBotOverridesStorageKey(userId));
+  } catch {
+    // ignore
+  }
+}
+
+export function resolveRunnableBotSettings(userId?: string | null): BotBuilderSettings | null {
+  const base =
+    readCurrentBotSettings(userId) ?? (userId ? readCurrentBotSettings(null) : null);
+  if (!base) return null;
+  const overrides =
+    readUserBotOverrides(userId) ?? (userId ? readUserBotOverrides(null) : null) ?? {};
+  return normalizeBotBuilderSettings({ ...base, ...overrides });
 }
 
 export function normalizeBotBuilderSettings(settings: BotBuilderSettings): BotBuilderSettings {
