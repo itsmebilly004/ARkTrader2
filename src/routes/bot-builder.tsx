@@ -7,7 +7,6 @@ import { getBlocklyRuntime, getDerivWorkspace } from "@/external/bot-builder/blo
 import { persistWorkspaceSnapshot } from "@/external/bot-builder/workspace-persistence";
 import { TopShell } from "@/components/top-shell";
 import { BotRunMonitorPanel } from "@/components/bot-run-monitor";
-import { BotSettingsPanel } from "@/components/bot-settings-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { useBotRunner } from "@/context/bot-runner-context";
@@ -55,8 +54,6 @@ function BotBuilderPage() {
         </div>
 
         <div className="flex min-h-0 flex-col overflow-hidden">
-          {!monitorCollapsed && <BotSettingsPanel userId={user?.id} />}
-
           <BotRunMonitorPanel
             activeTab={activeTab}
             collapsed={monitorCollapsed}
