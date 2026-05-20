@@ -117,32 +117,6 @@ function contractTypeLabel(settings: BotBuilderSettings): string {
   return `${family} / ${dir}`;
 }
 
-function conditionAllowsTrade(
-  settings: BotBuilderSettings,
-  stake: number,
-  runNumber: number,
-  totalProfit: number,
-) {
-  const leftValue =
-    settings.conditionLeft === "Total Profit"
-      ? totalProfit
-      : settings.conditionLeft === "Stake"
-        ? stake
-        : settings.conditionLeft === "Run Count"
-          ? runNumber
-          : settings.selectedDigit;
-  const rightValue = Number(settings.conditionRight);
-  if (settings.conditionOperator === "contains") {
-    return settings.conditionRight
-      .split(",")
-      .map((s) => s.trim())
-      .includes(String(leftValue));
-  }
-  if (!Number.isFinite(rightValue)) return true;
-  if (settings.conditionOperator === ">") return leftValue > rightValue;
-  if (settings.conditionOperator === "<") return leftValue < rightValue;
-  return leftValue === rightValue;
-}
 
 async function waitForSettlement(contractId: string): Promise<Settlement> {
   return new Promise((resolve, reject) => {
@@ -359,13 +333,6 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
         const snapshot = { ...settings, currency: runCurrency };
         const stake = clampNumber(currentStake, 0.35, snapshot.maxStake);
 
-        if (!conditionAllowsTrade(snapshot, stake, index + 1, runningProfit)) {
-          addJournal("Purchase condition is false. Waiting for next run cycle.", "warning");
-          if (!snapshot.tradeEveryTick) break;
-          await sleep(700);
-          continue;
-        }
-
         const input = {
           barrier:
             tradeCategory(snapshot) === "higher_lower" ||
@@ -522,7 +489,7 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
             ? clampNumber(stake * snapshot.martingale, 0.35, snapshot.maxStake)
             : snapshot.stake;
 
-        if (!snapshot.tradeEveryTick) await sleep(1000);
+        await sleep(1000);
       }
 
       await refreshBalances("bot-runner-run-complete", account.account_id).catch((err) => {
