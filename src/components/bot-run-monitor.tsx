@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Play, Square } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Play, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -64,6 +64,7 @@ export const DEFAULT_BOT_MONITOR_JOURNAL: BotMonitorJournalEntry[] = [
 
 type BotRunMonitorPanelProps = {
   activeTab: string;
+  connecting?: boolean;
   currency: string;
   journal: BotMonitorJournalEntry[];
   onReset?: () => void;
@@ -82,6 +83,7 @@ type BotRunMonitorPanelProps = {
 export function BotRunMonitorPanel({
   activeTab,
   collapsed = false,
+  connecting = false,
   currency,
   journal,
   mode = "builder",
@@ -98,7 +100,9 @@ export function BotRunMonitorPanel({
   if (collapsed) {
     return mode === "footer" ? (
       <CollapsedFooterMonitor
+        connecting={connecting}
         currency={currency}
+        onRun={onRun}
         onToggleCollapse={onToggleCollapse}
         stats={stats}
         status={status}
@@ -106,6 +110,7 @@ export function BotRunMonitorPanel({
       />
     ) : (
       <CollapsedBuilderMonitor
+        connecting={connecting}
         currency={currency}
         onReset={onReset}
         onRun={onRun}
@@ -129,7 +134,7 @@ export function BotRunMonitorPanel({
     >
       <div className="flex min-h-[49px] items-center gap-2 bg-[#f7f7f7] pr-2 dark:bg-[#1c1c1c]">
         <div className="shrink-0">
-          {primaryAction ?? <RunButton onRun={onRun} status={status} />}
+          {primaryAction ?? <RunButton connecting={connecting} onRun={onRun} status={status} />}
         </div>
         <div className="flex h-[38px] min-w-0 flex-1 flex-col items-center justify-center rounded-[2px] border border-[#cfd2d4] bg-white px-2 dark:border-[#333] dark:bg-[#101010]">
           <div className="max-w-full truncate text-xs font-bold">
@@ -182,17 +187,47 @@ export function BotRunMonitorPanel({
           value="summary"
           className="m-0 min-h-0 flex-1 bg-white p-3 sm:p-4 dark:bg-[#151515]"
         >
-          <div className="flex min-h-36 items-center justify-center bg-[#f1f2f3] px-4 text-center text-sm leading-5 text-[#444] sm:h-[228px] sm:px-8 dark:bg-[#202020] dark:text-[#d8d8d8]">
-            <p>
-              When you&apos;re ready to trade, hit <strong>Run.</strong>
-              <br />
-              You&apos;ll be able to track your bot&apos;s
-              <br />
-              performance here.
-            </p>
-          </div>
+          {stats.runs === 0 ? (
+            <div className="flex min-h-36 items-center justify-center bg-[#f1f2f3] px-4 text-center text-sm leading-5 text-[#444] sm:h-[228px] sm:px-8 dark:bg-[#202020] dark:text-[#d8d8d8]">
+              <p>
+                When you&apos;re ready to trade, hit <strong>Run.</strong>
+                <br />
+                You&apos;ll be able to track your bot&apos;s
+                <br />
+                performance here.
+              </p>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-md p-4 text-center",
+                stats.totalProfitLoss >= 0
+                  ? "bg-[#e6f7ef] dark:bg-[#163a2a]"
+                  : "bg-[#fdebed] dark:bg-[#3a1820]",
+              )}
+            >
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#555] dark:text-[#cfd2d4]">
+                {stats.totalProfitLoss >= 0 ? "Profit so far" : "Loss so far"}
+              </span>
+              <span
+                className={cn(
+                  "text-3xl font-bold tabular-nums sm:text-4xl",
+                  stats.totalProfitLoss >= 0
+                    ? "text-[#078a5b] dark:text-[#42d48c]"
+                    : "text-[#cc2f39] dark:text-[#ff6b73]",
+                )}
+              >
+                {stats.totalProfitLoss >= 0 ? "+" : ""}
+                {formatMoney(stats.totalProfitLoss, currency)}
+              </span>
+              <span className="text-[11px] text-[#777] dark:text-[#b7b7b7]">
+                across {stats.runs} run{stats.runs === 1 ? "" : "s"} ({stats.contractsWon} won
+                / {stats.contractsLost} lost)
+              </span>
+            </div>
+          )}
 
-          <div className="bg-[#f1f2f3] pb-4 dark:bg-[#202020]">
+          <div className="mt-3 bg-[#f1f2f3] pb-4 dark:bg-[#202020]">
             <div className="px-5 pt-4 text-right text-[11px] underline">What&apos;s this?</div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-5 px-3 pt-3 text-center sm:grid-cols-3 sm:px-5 sm:gap-y-6">
               <SummaryMetric label="Total stake" value={formatMoney(stats.totalStake, currency)} />
@@ -205,24 +240,15 @@ export function BotRunMonitorPanel({
               <SummaryMetric label="Contracts won" value={stats.contractsWon} />
               <SummaryMetric
                 label="Total profit/loss"
-                value={formatMoney(stats.totalProfitLoss, currency)}
+                value={`${stats.totalProfitLoss >= 0 ? "+" : ""}${formatMoney(stats.totalProfitLoss, currency)}`}
                 valueClassName={summaryProfitLossClassName(stats.totalProfitLoss)}
               />
             </div>
           </div>
-
-          <button
-            className="mt-3 hidden h-10 w-full rounded-[3px] border border-[#999] bg-white text-sm font-bold hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60 sm:block dark:bg-[#151515] dark:hover:bg-[#202020]"
-            disabled={!onReset}
-            type="button"
-            onClick={onReset}
-          >
-            Reset
-          </button>
         </TabsContent>
 
-        <TabsContent value="transactions" className="m-0 min-h-0 flex-1 bg-white dark:bg-[#151515]">
-          <ScrollArea className="h-full">
+        <TabsContent value="transactions" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-[#151515]">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {transactions.length === 0 ? (
               <EmptyPanel title="No transactions yet" />
             ) : (
@@ -299,9 +325,9 @@ export function BotRunMonitorPanel({
                 </div>
               </div>
             )}
-          </ScrollArea>
+          </div>
         </TabsContent>
-        <TabsContent value="journal" className="m-0 min-h-0 flex-1 bg-white dark:bg-[#151515]">
+        <TabsContent value="journal" className="m-0 min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#151515]">
           <ScrollArea className="h-full p-4">
             <div className="space-y-2">
               {journal.map((entry) => (
@@ -326,10 +352,10 @@ export function BotRunMonitorPanel({
           </ScrollArea>
         </TabsContent>
       </Tabs>
-      <div className="border-t border-[#e5e5e5] bg-white p-3 sm:hidden dark:border-[#2b2b2b] dark:bg-[#151515]">
+      <div className="border-t border-[#e5e5e5] bg-white p-3 dark:border-[#2b2b2b] dark:bg-[#151515]">
         <button
-          className="h-10 w-full rounded-[3px] border border-[#999] bg-white text-sm font-bold hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101010] dark:hover:bg-[#202020]"
-          disabled={!onReset}
+          className="h-10 w-full rounded-[3px] border border-[#999] bg-white text-sm font-bold text-[#333] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101010] dark:text-[#eeeeee] dark:hover:bg-[#202020]"
+          disabled={!onReset || status === "running"}
           type="button"
           onClick={onReset}
         >
@@ -340,29 +366,42 @@ export function BotRunMonitorPanel({
   );
 }
 
-function RunButton({ onRun, status }: { onRun?: () => void; status: BotMonitorStatus }) {
+function RunButton({
+  connecting = false,
+  onRun,
+  status,
+}: {
+  connecting?: boolean;
+  onRun?: () => void;
+  status: BotMonitorStatus;
+}) {
   return (
     <Button
       className={cn(
         "h-[40px] w-[82px] rounded-none text-base font-bold text-white",
-        status === "running"
-          ? "bg-[#ff444f] hover:bg-[#ef3f49]"
-          : "bg-[#4bb4b3] hover:bg-[#43a5a4]",
+        connecting
+          ? "bg-[#4bb4b3] opacity-80"
+          : status === "running"
+            ? "bg-[#ff444f] hover:bg-[#ef3f49]"
+            : "bg-[#4bb4b3] hover:bg-[#43a5a4]",
       )}
-      disabled={!onRun}
+      disabled={!onRun || connecting}
       onClick={onRun}
     >
-      {status === "running" ? (
+      {connecting ? (
+        <Loader2 className="mr-1 size-4 animate-spin" />
+      ) : status === "running" ? (
         <Square className="mr-1 size-4 fill-white" />
       ) : (
         <Play className="mr-1 size-5 fill-white" />
       )}
-      {status === "running" ? "Stop" : "Run"}
+      {connecting ? "..." : status === "running" ? "Stop" : "Run"}
     </Button>
   );
 }
 
 function CollapsedBuilderMonitor({
+  connecting = false,
   currency,
   onReset,
   onRun,
@@ -372,6 +411,7 @@ function CollapsedBuilderMonitor({
   status,
   title,
 }: {
+  connecting?: boolean;
   currency: string;
   onReset?: () => void;
   onRun?: () => void;
@@ -385,11 +425,11 @@ function CollapsedBuilderMonitor({
   return (
     <>
       <aside className="fixed inset-x-2 bottom-2 z-40 flex items-center gap-2 rounded-lg border border-[#d8d8d8] bg-white p-1.5 text-[#333333] shadow-lg lg:hidden dark:border-[#2c2c2c] dark:bg-[#151515] dark:text-[#eeeeee]">
-        <div className="shrink-0">{primaryAction ?? <RunButton onRun={onRun} status={status} />}</div>
+        <div className="shrink-0">{primaryAction ?? <RunButton connecting={connecting} onRun={onRun} status={status} />}</div>
         <button
           aria-label="Reset bot monitor"
           className="flex h-10 shrink-0 items-center justify-center rounded-md border border-[#d6d6d6] bg-white px-3 text-sm font-bold transition hover:bg-[#f1f2f3] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#333] dark:bg-[#101010] dark:hover:bg-[#202020]"
-          disabled={!onReset}
+          disabled={!onReset || status === "running"}
           type="button"
           onClick={onReset}
         >
@@ -430,13 +470,17 @@ function CollapsedBuilderMonitor({
 }
 
 function CollapsedFooterMonitor({
+  connecting = false,
   currency,
+  onRun,
   onToggleCollapse,
   stats,
   status,
   title,
 }: {
+  connecting?: boolean;
   currency: string;
+  onRun?: () => void;
   onToggleCollapse?: () => void;
   stats: BotMonitorStats;
   status: BotMonitorStatus;
@@ -444,21 +488,30 @@ function CollapsedFooterMonitor({
 }) {
   const summaryClassName = summaryProfitLossClassName(stats.totalProfitLoss);
   return (
-    <button
-      aria-label="Expand bot monitor"
-      className="fixed inset-x-2 bottom-2 z-40 mx-auto flex h-11 max-w-6xl items-center gap-3 rounded-lg border border-[#d8d8d8] bg-white px-3 text-left text-[#333333] shadow-lg transition hover:bg-[#f7f7f7] dark:border-[#2c2c2c] dark:bg-[#151515] dark:text-[#eeeeee] dark:hover:bg-[#202020]"
-      type="button"
-      onClick={onToggleCollapse}
-    >
-      <StatusDot status={status} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-bold uppercase tracking-wide">{title}</div>
-        <div className={cn("truncate font-mono text-[11px]", summaryClassName)}>
-          Runs {stats.runs} / P/L {formatMoney(stats.totalProfitLoss, currency)}
+    <div className="fixed inset-x-2 bottom-2 z-40 mx-auto flex h-11 max-w-6xl items-center gap-2 rounded-lg border border-[#d8d8d8] bg-white pl-2 pr-3 text-left text-[#333333] shadow-lg dark:border-[#2c2c2c] dark:bg-[#151515] dark:text-[#eeeeee]">
+      {status !== "running" && (
+        <RunButton connecting={connecting} onRun={onRun} status={status} />
+      )}
+      <button
+        aria-label="Expand bot monitor"
+        className="flex min-w-0 flex-1 items-center gap-3 self-stretch transition hover:opacity-80"
+        type="button"
+        onClick={onToggleCollapse}
+      >
+        <StatusDot status={connecting ? "running" : status} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-bold uppercase tracking-wide">{title}</div>
+          <div className={cn("truncate font-mono text-[11px]", connecting ? "text-[#4bb4b3]" : status === "running" ? "text-[#4bb4b3]" : summaryClassName)}>
+            {connecting
+              ? "Connecting..."
+              : status === "running"
+                ? `Running — Runs ${stats.runs} / P/L ${formatMoney(stats.totalProfitLoss, currency)}`
+                : `Runs ${stats.runs} / P/L ${formatMoney(stats.totalProfitLoss, currency)}`}
+          </div>
         </div>
-      </div>
-      <ChevronUp className="size-4 shrink-0" />
-    </button>
+        <ChevronUp className="size-4 shrink-0" />
+      </button>
+    </div>
   );
 }
 

@@ -72,7 +72,7 @@ function TradingBots() {
     setDeployingId(bot.id);
     try {
       const xml = await fetchBotXmlFromDatabase(bot.id);
-      await importBotXmlIntoBuilderMemory(user.id, { name: bot.name, xml });
+      await importBotXmlIntoBuilderMemory(user.id, { name: bot.name, xml, presetId: bot.id });
       recordBotPresetActivity(user.id, "deployed", bot.name, bot.id);
       toast.success(`Imported "${bot.name}" into the bot builder.`);
       navigate({ to: "/bot-builder" });

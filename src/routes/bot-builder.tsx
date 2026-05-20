@@ -482,8 +482,8 @@ function BotBuilderPage() {
         );
 
         if (
-          runningProfit >= current.takeProfit ||
-          runningProfit <= -Math.abs(current.stopLoss)
+          (current.takeProfit > 0 && runningProfit >= current.takeProfit) ||
+          (current.stopLoss > 0 && runningProfit <= -Math.abs(current.stopLoss))
         ) {
           addJournal("Profit or loss threshold reached. Bot stopped.", "warning");
           break;

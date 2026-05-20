@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { StoreProvider, useStore } from "@/external/stores/useStore";
 import dbot from "@/external/bot-skeleton/scratch/dbot";
 import { useAuth } from "@/hooks/use-auth";
+import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import {
   clearCurrentBotPresetId,
   deleteSavedBotPreset,
@@ -59,7 +60,7 @@ import { BlocksMenuSidebar, closeBlocklyFlyout } from "./blocks-menu-sidebar";
 import { getBlocklyRuntime, getDerivWorkspace, type BlocklyEventLike } from "./blockly-runtime";
 import "./bot-builder.css";
 
-const PERSIST_DEBOUNCE_MS = 500;
+const PERSIST_DEBOUNCE_MS = 200;
 const SIDEBAR_PREF_KEY = "arktrader:bot-builder:sidebar-collapsed";
 
 const generatePresetId = (): string => {
@@ -88,6 +89,7 @@ const BotBuilderInner = observer(() => {
   const { is_loading } = blockly_store;
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const { account, balance, currency } = useDerivBalanceContext();
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -177,11 +179,12 @@ const BotBuilderInner = observer(() => {
           is_mobile: false,
           is_dark_mode_on: document.documentElement.classList.contains("dark"),
           client: {
-            loginid: null,
-            currency: "USD",
+            loginid: account?.loginid ?? account?.account_id ?? null,
+            currency: currency ?? account?.currency ?? "USD",
+            balance: parseFloat(String(balance ?? account?.balance ?? 0)),
             landing_company_shortcode: "svg",
-            is_logged_in: false,
-            getToken: () => "",
+            is_logged_in: !!user,
+            getToken: () => account?.deriv_token ?? "",
           },
           dashboard,
           toolbar,
@@ -204,7 +207,12 @@ const BotBuilderInner = observer(() => {
           // or the autosave listener.
           const currentUser = userIdRef.current;
           let restoredXmlSuccessfully = false;
-          clearCurrentBotPresetId(currentUser);
+          // NOTE: do NOT clear the current preset ID here. The preset ID is set
+          // during Deploy and must persist across navigations so autosave can
+          // continue updating the preset-workspaces key. It is only cleared when
+          // the user explicitly loads a different strategy (file upload, library
+          // load, or workspace reset) — each of those handlers already calls
+          // clearCurrentBotPresetId directly.
           const saved_xml = readSavedWorkspaceXml(currentUser) ?? readSavedWorkspaceXml(null);
           if (saved_xml) {
             restoredXmlSuccessfully = loadWorkspaceXmlIntoBlockly(workspace, saved_xml);
@@ -303,19 +311,30 @@ const BotBuilderInner = observer(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When the user signs in AFTER the bot-builder has already mounted, copy
-  // anything they had saved while anonymous into their user-specific key so
-  // future refreshes restore correctly.
+  // When the user signs in AFTER the bot-builder has already mounted (late auth
+  // resolution), ensure the workspace is persisted under the user-specific key.
+  // Two cases:
+  //   1. Guest edits exist and no user key yet → promote anonymous work.
+  //   2. Auth resolved after dbot init completed (race): init read the null key
+  //      (null → "guest"), found nothing, so the workspace was loaded from
+  //      localForage. The user key might already exist (prior session) but the
+  //      current workspace is the authoritative live state — snapshot it now so
+  //      future mounts that DO resolve auth before dbot init read the right XML.
   React.useEffect(() => {
     if (!initialisedRef.current) return;
     if (!userId) return;
     const guest_xml = readSavedWorkspaceXml(null);
     const user_xml = readSavedWorkspaceXml(userId);
+    const ws = getDerivWorkspace();
+    if (!ws) return;
     if (guest_xml && !user_xml) {
-      const ws = getDerivWorkspace();
-      if (ws) {
-        persistWorkspaceSnapshot(userId, ws);
-      }
+      // Case 1: promote anonymous session work to the user's key.
+      persistWorkspaceSnapshot(userId, ws);
+    } else if (guest_xml && user_xml) {
+      // Case 2: auth resolved late, both keys exist. Snapshot the live workspace
+      // to refresh the user key with the most recent state and clear the stale guest key.
+      persistWorkspaceSnapshot(userId, ws);
+      try { window.localStorage.removeItem(`arktrader:bot-builder:guest:workspace-xml`); } catch { /* noop */ }
     }
   }, [userId]);
 

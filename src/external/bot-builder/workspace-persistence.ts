@@ -1,6 +1,8 @@
 import {
   initialBotBuilderSettings,
   persistCurrentBotSettings,
+  persistPresetWorkspaceXml,
+  readCurrentBotPresetId,
   readCurrentBotSettings,
   type BotBuilderDurationUnit,
   type BotBuilderDigitContract,
@@ -580,6 +582,12 @@ export function persistWorkspaceSnapshot(
       // refresh / re-open of /bot-builder picks up the user's last bot
       // automatically without any post-init React work.
       scheduleRecentWorkspaceWrite(workspace, options?.name ?? "My bot strategy");
+      // Keep the preset-specific workspace store in sync so re-deploying the
+      // same preset restores the user's latest edits rather than the original bot XML.
+      const currentPresetId = readCurrentBotPresetId(userId);
+      if (currentPresetId) {
+        persistPresetWorkspaceXml(userId, currentPresetId, xml_text);
+      }
     }
   } catch (err) {
     console.warn("[bot-builder] failed to persist workspace xml", err);
