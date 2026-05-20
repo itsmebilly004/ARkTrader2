@@ -47,7 +47,8 @@
       "Bash(node *)",
       "Bash(grep -v \"Binary\\\\\\\\|scratch\\\\\\\\|external\\\\\\\\|\\\\.d\\\\.ts\")",
       "Bash(findstr /S /R \"Blockly\\\\.inject\\\\|loadBlockly\\\\|initWorkspace\" C:\\\\Users\\\\ADMIN\\\\Desktop\\\\arktrader2\\\\ARkTrader2\\\\src\\\\external\\\\bot-skeleton\\\\scratch\\\\dbot.js)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Select-String -NotMatch \"arktrader-hub\")"
     ]
   }
 }

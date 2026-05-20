@@ -117,6 +117,8 @@ export type TickPoint = { time: number; value: number };
 export const DERIV_TRADING_SESSION_NOT_INITIALIZED_MESSAGE = "Trading session not initialized";
 export const DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE =
   "Account connected. Trading authorization not ready yet.";
+export const DERIV_OAUTH_DASHBOARD_FAILURE_MESSAGE =
+  "Deriv returned an account parameter instead of an OAuth authorization code. The connection cannot be completed. Please try connecting again.";
 
 export const SYNTHETIC_MARKETS = [
   { symbol: "R_10", name: "Volatility 10 Index" },

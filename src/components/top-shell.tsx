@@ -219,6 +219,10 @@ export function TopShell({
     navigate({ to: "/auth", search: { mode: "signin" } });
   }
 
+  function handleDeposit() {
+    window.open("https://app.deriv.com/cashier/deposit", "_blank", "noopener,noreferrer");
+  }
+
   async function handleRefreshBalances() {
     try {
       await refreshBalances("manual-dropdown");
@@ -479,6 +483,12 @@ export function TopShell({
           </button>
           {user && account && (
             <>
+              <Button
+                onClick={handleDeposit}
+                className="hidden h-9 rounded-md bg-[#ff444f] px-5 text-sm font-bold text-white hover:bg-[#eb3e48] sm:inline-flex"
+              >
+                Deposit
+              </Button>
               <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <button className="flex min-w-0 max-w-[min(58vw,17rem)] items-center gap-1.5 rounded-full border border-[#d6d6d6] bg-white px-2 py-1.5 transition hover:bg-[#f2f3f4] sm:max-w-full sm:gap-2 sm:px-3 dark:border-[#2a2a2a] dark:bg-[#1a1a1a] dark:hover:bg-[#222]">

@@ -10,12 +10,19 @@ import {
   Bot,
   ArrowUpRight,
   ArrowDownRight,
+  Plug,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SYNTHETIC_MARKETS } from "@/lib/deriv";
+import {
+  buildOAuthUrl,
+  redirectToDerivOAuth,
+  sanitizeDerivOAuthUrl,
+  SYNTHETIC_MARKETS,
+} from "@/lib/deriv";
 import { Link } from "@tanstack/react-router";
 import type { Tables } from "@/integrations/supabase/types";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/")({
   component: DashboardHome,
@@ -52,11 +59,20 @@ function StatCard({
 function DashboardHome() {
   const { user } = useAuth();
   const { balance, currency } = useDerivBalanceContext();
+  const [hasDeriv, setHasDeriv] = useState<boolean | null>(null);
   const [trades, setTrades] = useState<Tables<"trades">[]>([]);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    supabase
+      .from("sessions")
+      .select("id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .then(({ data, error }) => {
+        if (!cancelled && !error) setHasDeriv((data?.length ?? 0) > 0);
+      });
     const loadTrades = () =>
       supabase
         .from("trades")
@@ -89,6 +105,18 @@ function DashboardHome() {
   const losses = trades.filter((t) => t.status === "lost").length;
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
 
+  const connectDeriv = async () => {
+    try {
+      const url = await buildOAuthUrl({ returnTo: "/dashboard" });
+      console.log("Deriv OAuth URL:", sanitizeDerivOAuthUrl(url));
+      redirectToDerivOAuth(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not start Deriv OAuth.";
+      console.error("[Deriv OAuth] Dashboard connect failed", error);
+      toast.error(message);
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
       <div>
@@ -96,6 +124,22 @@ function DashboardHome() {
         <p className="text-sm text-muted-foreground">Here's a snapshot of your trading activity.</p>
       </div>
 
+      {hasDeriv === false && (
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-border bg-card/80 p-6 text-card-foreground shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="font-medium text-foreground">Connect your Deriv account</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Authorize ArkTrader through Deriv's official OAuth — no passwords stored.
+            </p>
+          </div>
+          <Button
+            onClick={connectDeriv}
+            className="w-full shrink-0 bg-[oklch(0.7_0.17_150)] text-white hover:bg-[oklch(0.65_0.17_150)] sm:w-auto"
+          >
+            <Plug className="mr-1 size-4" /> Connect Deriv
+          </Button>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

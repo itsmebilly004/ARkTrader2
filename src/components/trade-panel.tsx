@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,20 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { updateTrackedTrade, upsertTrackedTrade } from "@/lib/activity-memory";
+import { isDemoAccount } from "@/lib/deriv-account";
 import {
+  DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE,
+  buildOAuthUrl,
   ensureDerivTradingConnection,
   getDerivTradingErrorMessage,
+  getStatus,
   getTradingSocketAccountId,
+  isDerivTradingAuthorizationFailure,
+  onStatus,
+  redirectToDerivOAuth,
+  sanitizeDerivOAuthUrl,
+  tradingAuthorizationIsFresh,
+  type ConnectionStatus,
   type TradeCategory,
   type TradingAdapter,
 } from "@/lib/deriv";
@@ -49,6 +60,7 @@ import {
   subscribeOpenContract,
 } from "@/lib/deriv-trading-service";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 type ChartOverlay = {
   entry: number | null;
@@ -68,7 +80,6 @@ type ProposalQuote = {
   pct: number | null;
 };
 
-
 interface TradePanelProps {
   market: string;
   lastPrice?: number | null;
@@ -76,6 +87,8 @@ interface TradePanelProps {
   onMarketChange?: (market: string) => void;
   onTradeTypeChange?: (tradeType: TradeCategory) => void;
   showMarketSelector?: boolean;
+  /** When true, the buy/sell action buttons render in a fixed bar at the bottom of the viewport. */
+  stickyActions?: boolean;
 }
 
 const EMPTY_QUOTE: ProposalQuote = {
@@ -86,6 +99,50 @@ const EMPTY_QUOTE: ProposalQuote = {
   pct: null,
 };
 
+function accountHasFreshTradingAuthorization(
+  account: ReturnType<typeof useDerivBalanceContext>["account"],
+) {
+  if (!account?.token_source || !account.trading_adapter) return false;
+  return tradingAuthorizationIsFresh({
+    account_id: account.account_id,
+    trading_authorized: Boolean(account.trading_authorized),
+    trading_adapter: account.trading_adapter,
+    token_source: account.token_source,
+    trading_authorized_at: account.trading_authorized_at ?? null,
+    last_trading_error: account.last_trading_error ?? null,
+  });
+}
+
+function TradingConnectionBadge({
+  error,
+  status,
+}: {
+  error: string | null;
+  status: ConnectionStatus;
+}) {
+  const statusMeta =
+    status === "connected"
+      ? { chip: "bg-[#e7f8f2] text-[#0b8f62]", label: "READY" }
+      : status === "connecting" || status === "reconnecting"
+        ? { chip: "bg-[#fff8e7] text-[#9a6700]", label: "CONNECTING" }
+        : { chip: "bg-[#fff1f2] text-[#cc2f39]", label: "DISCONNECTED" };
+  return (
+    <div className="rounded-md border border-[#d6d9dc] bg-white px-3 py-2 text-xs shadow-sm max-sm:px-2 max-sm:py-1 max-sm:text-[10px] dark:border-[#2f3337] dark:bg-[#151515]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-semibold text-[#495057] dark:text-[#dce1e5]">Trading connection</span>
+        <span
+          className={[
+            "rounded px-2 py-1 text-[10px] font-semibold tracking-wide max-sm:px-1 max-sm:py-0.5 max-sm:text-[8px]",
+            statusMeta.chip,
+          ].join(" ")}
+        >
+          {statusMeta.label}
+        </span>
+      </div>
+      {error && <div className="mt-1 text-[#cc2f39] dark:text-[#ff8b92]">{error}</div>}
+    </div>
+  );
+}
 
 export function TradePanel({
   market,
@@ -94,6 +151,7 @@ export function TradePanel({
   onMarketChange,
   onTradeTypeChange,
   showMarketSelector = true,
+  stickyActions = false,
 }: TradePanelProps) {
   const { user } = useAuth();
   const { account, balance: accountBalance, currency, refreshBalances } = useDerivBalanceContext();
@@ -111,19 +169,31 @@ export function TradePanel({
   const [multiplier, setMultiplier] = useState(100);
   const [takeProfit, setTakeProfit] = useState<number>(0);
   const [stopLoss, setStopLoss] = useState<number>(0);
+  // Session-level P/L tally for binary contracts (rise/fall, digits, etc.).
+  // Deriv's `limit_order` only applies to multiplier/accumulator contracts;
+  // for everything else we honor take-profit / stop-loss client-side by
+  // accumulating realised profit and blocking further buys once a threshold
+  // is hit. The badge below the trade buttons surfaces this to the user.
+  const [sessionProfit, setSessionProfit] = useState<number>(0);
+  const [sessionLimitMessage, setSessionLimitMessage] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Record<string, ProposalQuote>>({});
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeContract, setActiveContract] = useState<ActiveContractState>(EMPTY_CONTRACT_STATE);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [quotesVersion, setQuotesVersion] = useState(0);
+  const [tradingConnectionStatus, setTradingConnectionStatus] = useState<ConnectionStatus>(() =>
+    getStatus(),
+  );
+  const [tradingConnectionError, setTradingConnectionError] = useState<string | null>(null);
 
-  const unsubscribeRef = useRef<null | (() => Promise<void>)>(null);
+  const unsubscribeRef = useRef<null | (() => void | Promise<void>)>(null);
   const buyInFlightRef = useRef(false);
   const tradeIdRef = useRef<string | null>(null);
   const activeAccountIdRef = useRef<string | null>(null);
+  const pageLoadAuthorizationAttemptRef = useRef<string | null>(null);
   const closedRef = useRef(false);
-  const profitFlashTimerRef = useRef<number | null>(null);
+  const autoSellInFlightRef = useRef(false);
 
   const config = tradeTypeConfig(selectedTradeType);
   const currentDigit =
@@ -139,12 +209,143 @@ export function TradePanel({
   useEffect(() => {
     return () => {
       void cleanupSubscription();
-      if (profitFlashTimerRef.current !== null) {
-        window.clearTimeout(profitFlashTimerRef.current);
-      }
     };
   }, []);
 
+  useEffect(
+    () =>
+      onStatus((nextStatus) => {
+        if (nextStatus === "disconnected" && accountHasFreshTradingAuthorization(account)) {
+          setTradingConnectionStatus("connected");
+          return;
+        }
+        setTradingConnectionStatus(nextStatus);
+      }),
+    [
+      account,
+      account?.account_id,
+      account?.token_source,
+      account?.trading_authorized,
+      account?.trading_adapter,
+      account?.trading_authorized_at,
+      account?.last_trading_error,
+    ],
+  );
+
+  useEffect(() => {
+    setErrorMessage(null);
+    setTradingConnectionError(null);
+    if (!account || !token) {
+      setTradingConnectionStatus("disconnected");
+      return;
+    }
+    let cancelled = false;
+    const preparedAuthorizationFresh = accountHasFreshTradingAuthorization(account);
+    const pageLoadAttemptKey = `${account.account_id}:${account.deriv_token.slice(-8)}:${account.token_source ?? "unknown"}`;
+    setTradingConnectionStatus((current) => {
+      if (preparedAuthorizationFresh) return "connected";
+      return current === "connected" ? current : "connecting";
+    });
+    console.info("[Manual Trader] page load active dashboard account", {
+      selectedAccountId: account.account_id,
+      loginid: account.loginid,
+      is_demo: account.is_demo,
+      normalizedType: account.normalizedType,
+      token_source: account.token_source ?? null,
+      deriv_token_exists: Boolean(account.deriv_token),
+      expires_at: account.expires_at ?? null,
+      balance: accountBalance,
+      currency: tradeCurrency,
+      trading_authorized: account.trading_authorized ?? false,
+      trading_adapter: account.trading_adapter ?? null,
+      trading_authorized_at: account.trading_authorized_at ?? null,
+      tradingAuthorizationFresh: preparedAuthorizationFresh,
+      last_trading_error: account.last_trading_error ?? null,
+    });
+    if (
+      !preparedAuthorizationFresh &&
+      pageLoadAuthorizationAttemptRef.current === pageLoadAttemptKey
+    ) {
+      setTradingConnectionStatus("connected");
+      setTradingConnectionError(
+        account.last_trading_error ? DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE : null,
+      );
+      console.info("[Manual Trader] page-load trading authorization retry skipped", {
+        selectedAccountId: account.account_id,
+        token_source: account.token_source ?? null,
+        last_trading_error: account.last_trading_error ?? null,
+        reason:
+          "Avoiding repeated OTP attempts for the same account; the next trade action can retry.",
+      });
+      return;
+    }
+    pageLoadAuthorizationAttemptRef.current = pageLoadAttemptKey;
+    ensureDerivTradingConnection(account, { context: "manual-trader-page-load" })
+      .then((tradingSession) => {
+        if (cancelled) return;
+        setTradingConnectionError(null);
+        console.info("[Manual Trader] active trading account ready", {
+          activeDashboardAccount: {
+            account_id: account.account_id,
+            loginid: account.loginid,
+            normalizedType: account.normalizedType,
+            token_source: account.token_source ?? null,
+          },
+          activeTradingAccount: {
+            account_id: tradingSession.account_id,
+            loginid: tradingSession.loginid,
+            normalizedType: tradingSession.normalizedType,
+            token_source: tradingSession.token_source,
+            adapter: tradingSession.adapter,
+            websocketMode: tradingSession.websocketMode,
+            expires_at: tradingSession.expires_at,
+          },
+          websocketMode: tradingSession.websocketMode,
+          connectionStatus: getStatus(),
+          websocketAccountId: getTradingSocketAccountId(),
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = getDerivTradingErrorMessage(error);
+        if (isDerivTradingAuthorizationFailure(error)) {
+          setTradingConnectionStatus("connected");
+          setTradingConnectionError(DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE);
+        } else {
+          setTradingConnectionStatus("disconnected");
+          setTradingConnectionError(message);
+        }
+        console.warn("[Manual Trader] trading connection check failed", {
+          selectedAccountId: account.account_id,
+          loginid: account.loginid,
+          normalizedType: account.normalizedType,
+          token_source: account.token_source ?? null,
+          connectionStatus: getStatus(),
+          failureReason: message,
+          displayMessage: isDerivTradingAuthorizationFailure(error)
+            ? DERIV_TRADING_AUTHORIZATION_NOT_READY_MESSAGE
+            : message,
+          error,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    account,
+    account?.account_id,
+    account?.deriv_token,
+    account?.expires_at,
+    account?.token_source,
+    account?.trading_authorized,
+    account?.trading_adapter,
+    account?.trading_authorized_at,
+    account?.last_trading_error,
+    account?.normalizedType,
+    accountBalance,
+    token,
+    tradeCurrency,
+  ]);
 
   useEffect(() => {
     if (selectedTradeType === "accumulator") return;
@@ -180,7 +381,7 @@ export function TradePanel({
       setQuotes({});
       return;
     }
-    if (!account || !tradeCurrency) {
+    if (!token || !account || !tradeCurrency) {
       setQuotes({});
       return;
     }
@@ -265,6 +466,7 @@ export function TradePanel({
     stake,
     stopLoss,
     takeProfit,
+    token,
     tradeCurrency,
   ]);
 
@@ -288,37 +490,6 @@ export function TradePanel({
     }, 3500);
     return () => window.clearTimeout(resetTimer);
   }, [account, activeContract.status, refreshBalances, selectedTradeType]);
-
-  // Flash P/L on the chart for 2 seconds when any non-accumulator trade closes.
-  useEffect(() => {
-    if (selectedTradeType === "accumulator") return;
-    if (!["won", "lost", "sold"].includes(activeContract.status)) return;
-    const profit = activeContract.currentProfit;
-    if (profit == null) return;
-
-    if (profitFlashTimerRef.current !== null) {
-      window.clearTimeout(profitFlashTimerRef.current);
-      profitFlashTimerRef.current = null;
-    }
-
-    const isWin = profit >= 0;
-    onAccumulatorBarriers?.({
-      entry: activeContract.entrySpot,
-      high: config.needsBarrier
-        ? barrierLineFromInput(barrier, activeContract.entrySpot ?? lastPrice)
-        : null,
-      low: null,
-      profit,
-      profitCurrency: tradeCurrency,
-      profitStatus: isWin ? "active" : "lost",
-    });
-
-    profitFlashTimerRef.current = window.setTimeout(() => {
-      profitFlashTimerRef.current = null;
-      onAccumulatorBarriers?.({ entry: null, high: null, low: null, profit: null, profitStatus: null });
-    }, 2000);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeContract.status]);
 
   useEffect(() => {
     const selectedAccountId = account?.account_id ?? null;
@@ -363,13 +534,26 @@ export function TradePanel({
 
   function validateAccount() {
     if (!user) throw new Error("Sign in to place trades.");
-    if (!account) throw new Error("No account selected.");
+    if (!token || !account) throw new Error("Connect and select your Deriv account first.");
     if (!tradeCurrency) throw new Error("Selected account currency is missing.");
     if (!Number.isFinite(stake) || stake <= 0) throw new Error("Enter a valid stake.");
     if (accountBalance !== null && accountBalance < stake) {
       throw new Error(
         `Insufficient balance: ${accountBalance.toFixed(2)} ${tradeCurrency} available.`,
       );
+    }
+    if (account.normalizedType !== "demo" && account.normalizedType !== "real") {
+      throw new Error("Selected Deriv account type could not be verified from its prefix.");
+    }
+    const selectedAccountIsDemo = isDemoAccount(account);
+    if (selectedAccountIsDemo !== Boolean(account.is_demo)) {
+      console.info("[Deriv Trade] Account classification corrected", {
+        account_id: account.account_id,
+        loginid: account.loginid,
+        normalizedType: account.normalizedType,
+        stored_is_demo: account.is_demo,
+        normalized_is_demo: selectedAccountIsDemo,
+      });
     }
   }
 
@@ -409,6 +593,36 @@ export function TradePanel({
 
   async function handleBuy(side: TradeSide) {
     if (buyInFlightRef.current || busy) return;
+    if (sessionLimitMessage) {
+      toast.error(sessionLimitMessage);
+      return;
+    }
+    if (!token) {
+      try {
+        const url = await buildOAuthUrl({ returnTo: "/" });
+        console.log("Deriv OAuth URL:", sanitizeDerivOAuthUrl(url));
+        redirectToDerivOAuth(url);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not start Deriv OAuth.";
+        console.error("[Deriv OAuth] Trade connect failed", error);
+        setErrorMessage(message);
+        toast.error(message);
+      }
+      return;
+    }
+    // Safety guard: confirm before placing a real-money trade so a user who
+    // wanted demo but the dashboard is on real doesn't fire by accident.
+    const accountIsReal = Boolean(account) && !isDemoAccount(account!);
+    if (accountIsReal) {
+      const accountLabel = account?.loginid || account?.account_id || "real";
+      const confirmed = window.confirm(
+        `You are about to place a REAL-money trade on ${accountLabel}. Continue?`,
+      );
+      if (!confirmed) {
+        toast.info("Trade cancelled.");
+        return;
+      }
+    }
     buyInFlightRef.current = true;
     setBusy(true);
     setErrorMessage(null);
@@ -417,7 +631,8 @@ export function TradePanel({
     closedRef.current = false;
     try {
       validateAccount();
-      if (!account || !user) throw new Error("No account selected.");
+      if (!account || !token || !user)
+        throw new Error("Connect and select your Deriv account first.");
       const tradingSession = await ensureDerivTradingConnection(account, {
         context: "standard-buy",
       });
@@ -513,7 +728,53 @@ export function TradePanel({
             status: next.status,
             websocketAccountId: getTradingSocketAccountId(),
           });
+          // Live in-contract TP/SL trigger: if the user set thresholds and the
+          // contract supports an early sell, fire a sell as soon as the
+          // current unrealised profit crosses either limit.
+          if (
+            !config.supportsMultiplier &&
+            config.supportsEarlySell &&
+            current.status === "active" &&
+            next.status === "active" &&
+            next.isValidToSell &&
+            next.sellPrice != null
+          ) {
+            const profit = Number(next.currentProfit ?? 0);
+            const tp = Math.abs(Number(takeProfit) || 0);
+            const sl = Math.abs(Number(stopLoss) || 0);
+            const shouldAutoSell =
+              (tp > 0 && profit >= tp) || (sl > 0 && profit <= -sl);
+            if (shouldAutoSell && !autoSellInFlightRef.current) {
+              autoSellInFlightRef.current = true;
+              toast.info(
+                profit >= 0
+                  ? `Auto-selling: take-profit hit (+${profit.toFixed(2)} ${tradeCurrency}).`
+                  : `Auto-selling: stop-loss hit (${profit.toFixed(2)} ${tradeCurrency}).`,
+              );
+              void handleSell().finally(() => {
+                autoSellInFlightRef.current = false;
+              });
+            }
+          }
           if (["sold", "won", "lost"].includes(next.status) && current.status === "active") {
+            const realised = Number(next.currentProfit ?? 0);
+            if (Number.isFinite(realised)) {
+              setSessionProfit((prior) => {
+                const total = prior + realised;
+                const tp = Math.abs(Number(takeProfit) || 0);
+                const sl = Math.abs(Number(stopLoss) || 0);
+                if (tp > 0 && total >= tp) {
+                  setSessionLimitMessage(
+                    `Session take-profit reached (+${total.toFixed(2)} ${tradeCurrency}). Further trades are blocked until you reset.`,
+                  );
+                } else if (sl > 0 && total <= -sl) {
+                  setSessionLimitMessage(
+                    `Session stop-loss reached (${total.toFixed(2)} ${tradeCurrency}). Further trades are blocked until you reset.`,
+                  );
+                }
+                return total;
+              });
+            }
             void cleanupSubscription();
             void markTradeClosed(next);
             void refreshBalances("trade-closed").catch((error) => {
@@ -608,6 +869,7 @@ export function TradePanel({
         {showMarketSelector && onMarketChange && (
           <MarketSelector value={market} onValueChange={onMarketChange} />
         )}
+        <TradingConnectionBadge error={tradingConnectionError} status={tradingConnectionStatus} />
         <TradeTypeCard
           config={config}
           onNext={() => nextTradeType(1)}
@@ -628,6 +890,7 @@ export function TradePanel({
       {showMarketSelector && onMarketChange && (
         <MarketSelector value={market} onValueChange={onMarketChange} />
       )}
+      <TradingConnectionBadge error={tradingConnectionError} status={tradingConnectionStatus} />
       <TradeTypeCard
         config={config}
         onNext={() => nextTradeType(1)}
@@ -679,43 +942,81 @@ export function TradePanel({
           <div className="mb-2 text-sm font-semibold text-[#1f2328] max-sm:mb-1 max-sm:text-xs">
             Multiplier
           </div>
-          <div className="max-sm:grid max-sm:grid-cols-3 max-sm:gap-1.5">
-            <Select
-              value={String(multiplier)}
-              onValueChange={(value) => setMultiplier(Number(value))}
-            >
-              <SelectTrigger className="h-10 rounded border-[#d6d9dc] font-semibold max-sm:h-8 max-sm:text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[10, 20, 30, 50, 100, 200, 300, 500].map((item) => (
-                  <SelectItem key={item} value={String(item)}>
-                    x{item}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="mt-3 grid grid-cols-2 gap-2 max-sm:col-span-2 max-sm:mt-0 max-sm:gap-1.5">
-              <Input
-                type="number"
-                min={0}
-                value={takeProfit}
-                onChange={(event) => setTakeProfit(Number(event.target.value))}
-                className="h-9 rounded border-[#d6d9dc] text-center font-mono max-sm:h-8 max-sm:text-xs"
-                placeholder="Take profit"
-              />
-              <Input
-                type="number"
-                min={0}
-                value={stopLoss}
-                onChange={(event) => setStopLoss(Number(event.target.value))}
-                className="h-9 rounded border-[#d6d9dc] text-center font-mono max-sm:h-8 max-sm:text-xs"
-                placeholder="Stop loss"
-              />
-            </div>
-          </div>
+          <Select
+            value={String(multiplier)}
+            onValueChange={(value) => setMultiplier(Number(value))}
+          >
+            <SelectTrigger className="h-10 rounded border-[#d6d9dc] font-semibold max-sm:h-8 max-sm:text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[10, 20, 30, 50, 100, 200, 300, 500].map((item) => (
+                <SelectItem key={item} value={String(item)}>
+                  x{item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
+
+      <div className="order-6 rounded-md border border-[#d6d9dc] bg-white p-3 shadow-sm max-sm:p-2 sm:order-none dark:border-[#2f3337] dark:bg-[#151515]">
+        <div className="mb-2 flex items-center justify-between text-sm font-semibold text-[#1f2328] max-sm:mb-1 max-sm:text-xs dark:text-[#f2f2f2]">
+          <span>Take profit / Stop loss</span>
+          <span
+            className={cn(
+              "rounded px-2 py-0.5 text-[10px] font-bold tabular-nums max-sm:px-1 max-sm:text-[9px]",
+              sessionProfit > 0
+                ? "bg-[#e6f7ef] text-[#078a5b] dark:bg-[#163a2a] dark:text-[#42d48c]"
+                : sessionProfit < 0
+                  ? "bg-[#fdebed] text-[#cc2f39] dark:bg-[#3a1820] dark:text-[#ff6b73]"
+                  : "bg-[#f2f3f4] text-[#495057] dark:bg-[#202020] dark:text-[#dce1e5]",
+            )}
+            title="Cumulative profit/loss for this session"
+          >
+            Session {sessionProfit >= 0 ? "+" : ""}
+            {sessionProfit.toFixed(2)} {tradeCurrency}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 max-sm:gap-1.5">
+          <Input
+            type="number"
+            min={0}
+            value={takeProfit}
+            onChange={(event) => setTakeProfit(Number(event.target.value))}
+            className="h-9 rounded border-[#d6d9dc] text-center font-mono max-sm:h-8 max-sm:text-xs"
+            placeholder={`Take profit (${tradeCurrency || "amount"})`}
+          />
+          <Input
+            type="number"
+            min={0}
+            value={stopLoss}
+            onChange={(event) => setStopLoss(Number(event.target.value))}
+            className="h-9 rounded border-[#d6d9dc] text-center font-mono max-sm:h-8 max-sm:text-xs"
+            placeholder={`Stop loss (${tradeCurrency || "amount"})`}
+          />
+        </div>
+        {(sessionLimitMessage || sessionProfit !== 0) && (
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-[#6f767d] max-sm:text-[10px] dark:text-[#a8b0b8]">
+            <span className="truncate">
+              {sessionLimitMessage ??
+                (config.supportsEarlySell
+                  ? "Active contract auto-sells if its P/L crosses these limits."
+                  : "Limits stop new buys once cumulative session P/L crosses them.")}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSessionProfit(0);
+                setSessionLimitMessage(null);
+              }}
+              className="shrink-0 rounded border border-[#d6d9dc] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#495057] hover:bg-[#f6f7f8] dark:border-[#30343a] dark:bg-[#101010] dark:text-[#dce1e5] dark:hover:bg-[#202020]"
+            >
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="order-4 sm:order-none">
         <StakePayoutToggle
@@ -727,13 +1028,15 @@ export function TradePanel({
         />
       </div>
 
-      <div className="order-5 space-y-2 max-sm:grid max-sm:grid-cols-2 max-sm:gap-1.5 max-sm:space-y-0 sm:order-none">
-        {config.sides.map((side) => {
+      {(() => {
+        const buttons = config.sides.map((side) => {
           const quote = quotes[side.value] ?? EMPTY_QUOTE;
           return (
             <ProposalButton
               key={side.value}
-              disabled={busy || quotesLoading || Boolean(quote.error)}
+              disabled={
+                busy || quotesLoading || Boolean(quote.error) || Boolean(sessionLimitMessage)
+              }
               label={side.label}
               loading={quotesLoading}
               onClick={() => void handleBuy(side)}
@@ -742,8 +1045,26 @@ export function TradePanel({
               tone={side.tone}
             />
           );
-        })}
-      </div>
+        });
+        if (stickyActions) {
+          return typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  className="fixed inset-x-0 bottom-16 z-30 grid gap-2 border-t border-[#e5e5e5] bg-white px-3 py-2 shadow-[0_-2px_12px_rgba(0,0,0,0.08)] dark:border-[#242424] dark:bg-[#151515]"
+                  style={{ gridTemplateColumns: `repeat(${config.sides.length}, minmax(0, 1fr))` }}
+                >
+                  {buttons}
+                </div>,
+                document.body,
+              )
+            : null;
+        }
+        return (
+          <div className="order-5 space-y-2 max-sm:grid max-sm:grid-cols-2 max-sm:gap-1.5 max-sm:space-y-0 sm:order-none">
+            {buttons}
+          </div>
+        );
+      })()}
 
       {(activeContract.contractId || activeContract.status === "error") && (
         <div className="order-7 sm:order-none">
