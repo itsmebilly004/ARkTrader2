@@ -498,7 +498,7 @@ function BestBotView({
 
   if (loading) {
     return (
-      <LoadingCard message="Scanning all bot presets across live markets…" />
+      <LoadingCard message="Scanning all bot presets across 500 recent ticks per market…" />
     );
   }
 
@@ -714,7 +714,7 @@ function ManualTraderView({
         </span>
       </div>
 
-      {loading && <LoadingCard message={`Scanning 10 markets for ${MANUAL_KIND_LABELS[kind]} edge…`} />}
+      {loading && <LoadingCard message={`Scanning 10 markets × 500 ticks for ${MANUAL_KIND_LABELS[kind]} edge…`} />}
       {!loading && error && <ErrorCard message={error} />}
 
       {!loading && !error && topMarket && (
@@ -933,8 +933,9 @@ function AccuracyDisclaimer() {
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
       <span>
         Synthetic indices are RNG-driven and do not react to news or events. This analysis
-        shows statistical bias over the last 200 ticks — it is a signal, not a guarantee.
-        Edge values of 0–3% are typical noise; always trade within your risk tolerance.
+        traces the last 500 ticks and ranks markets by statistical confidence (z-score), not just
+        raw edge. Edge values of 0–3% with low confidence are typical noise — always trade within
+        your risk tolerance.
       </span>
     </div>
   );

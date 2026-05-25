@@ -489,6 +489,7 @@ function CollapsedFooterMonitor({
   const summaryClassName = summaryProfitLossClassName(stats.totalProfitLoss);
   return (
     <div className="fixed inset-x-2 bottom-2 z-40 mx-auto flex h-11 max-w-6xl items-center gap-2 rounded-lg border border-[#d8d8d8] bg-white pl-2 pr-3 text-left text-[#333333] shadow-lg dark:border-[#2c2c2c] dark:bg-[#151515] dark:text-[#eeeeee]">
+      {/* Stop is hidden here — a running bot must be stopped from the expanded panel to avoid accidental clicks. */}
       {status !== "running" && (
         <RunButton connecting={connecting} onRun={onRun} status={status} />
       )}
@@ -503,7 +504,7 @@ function CollapsedFooterMonitor({
           <div className="truncate text-xs font-bold uppercase tracking-wide">{title}</div>
           <div className={cn("truncate font-mono text-[11px]", connecting ? "text-[#4bb4b3]" : status === "running" ? "text-[#4bb4b3]" : summaryClassName)}>
             {connecting
-              ? "Connecting..."
+              ? "Connecting to Deriv..."
               : status === "running"
                 ? `Running — Runs ${stats.runs} / P/L ${formatMoney(stats.totalProfitLoss, currency)}`
                 : `Runs ${stats.runs} / P/L ${formatMoney(stats.totalProfitLoss, currency)}`}

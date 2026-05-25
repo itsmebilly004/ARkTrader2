@@ -53,7 +53,9 @@
       "PowerShell(Remove-Item *)",
       "Bash(node_modules/.bin/tsc --noEmit)",
       "Bash(echo \"EXIT: $?\")",
-      "Bash(findstr /C:\"ai-assistant\")"
+      "Bash(findstr /C:\"ai-assistant\")",
+      "Bash(findstr /R \"scroll\\\\|tabs\\\\|table\\\\|button\")",
+      "Bash(findstr \"scroll tabs table button\")"
     ]
   }
 }

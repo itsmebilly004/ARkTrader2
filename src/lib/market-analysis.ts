@@ -75,8 +75,17 @@ const DIGIT_MARKET_SYMBOLS = [
   "1HZ10V", "1HZ25V", "1HZ50V", "1HZ75V", "1HZ100V",
 ] as const;
 
-const TICK_COUNT = 200;
+const TICK_COUNT = 500;
 const CACHE_TTL_MS = 2000;
+
+function binomialZScore(observedPct: number, expectedPct: number, sampleSize: number): number {
+  if (sampleSize <= 0) return 0;
+  const p = expectedPct / 100;
+  const variance = (p * (1 - p)) / sampleSize;
+  if (variance <= 0) return 0;
+  const stdErrPct = Math.sqrt(variance) * 100;
+  return (observedPct - expectedPct) / stdErrPct;
+}
 
 // ─── In-flight cache (2s TTL, dedupe only) ───────────────────────────────────
 
@@ -222,7 +231,7 @@ export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
   }
   if (allFailed) throw new Error("Could not reach Deriv's market data — check your connection");
 
-  const results: BotOpportunity[] = [];
+  const results: Array<BotOpportunity & { confidence: number }> = [];
 
   for (const preset of BOT_PRESET_CONFIGS) {
     const ticks = ticksMap.get(preset.market);
@@ -233,6 +242,7 @@ export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
       const expectedProbability = expectedPresetProbability(preset);
       results.push({
         actualProbability,
+        confidence: binomialZScore(actualProbability, expectedProbability, sampleSize),
         contractType: preset.contractType,
         edge: actualProbability - expectedProbability,
         expectedProbability,
@@ -251,12 +261,14 @@ export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
     }
   }
 
-  return results.sort((a, b) => {
-    // Launchable first, then by edge, then by actual probability
-    if (a.launchable !== b.launchable) return a.launchable ? -1 : 1;
-    if (b.edge !== a.edge) return b.edge - a.edge;
-    return b.actualProbability - a.actualProbability;
-  });
+  return results
+    .sort((a, b) => {
+      // Launchable first, then by statistical confidence (z-score), then by raw edge.
+      if (a.launchable !== b.launchable) return a.launchable ? -1 : 1;
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      return b.edge - a.edge;
+    })
+    .map(({ confidence: _confidence, ...rest }) => rest);
 }
 
 // ─── Manual market analysis ──────────────────────────────────────────────────
@@ -266,7 +278,7 @@ export async function analyzeBestMarketForContract(
 ): Promise<ManualMarketSuggestion[]> {
   const ticksMap = await fetchTicksBatch(DIGIT_MARKET_SYMBOLS, TICK_COUNT);
 
-  const suggestions: ManualMarketSuggestion[] = [];
+  const suggestions: Array<ManualMarketSuggestion & { confidence: number }> = [];
   let allFailed = true;
 
   for (const symbol of DIGIT_MARKET_SYMBOLS) {
@@ -276,7 +288,11 @@ export async function analyzeBestMarketForContract(
 
     try {
       if (kind === "rise_fall") {
-        suggestions.push(riseFallSuggestionFromTicks(symbol, ticks));
+        const suggestion = riseFallSuggestionFromTicks(symbol, ticks);
+        suggestions.push({
+          ...suggestion,
+          confidence: binomialZScore(suggestion.hitRate, 50, ticks.length - 1),
+        });
         continue;
       }
 
@@ -290,6 +306,7 @@ export async function analyzeBestMarketForContract(
         const side = evenRate >= oddRate ? "Even" : "Odd";
         const hitRate = Math.max(evenRate, oddRate);
         suggestions.push({
+          confidence: binomialZScore(hitRate, 50, sampleSize),
           digitPercentages: percentages,
           edge: hitRate - 50,
           expectation: 50,
@@ -299,7 +316,8 @@ export async function analyzeBestMarketForContract(
           symbol,
         });
       } else if (kind === "over_under") {
-        let bestEdge = -Infinity;
+        let bestZ = -Infinity;
+        let bestEdge = 0;
         let bestSide = "Over 4";
         let bestHitRate = 50;
         let bestExpectation = 50;
@@ -312,13 +330,17 @@ export async function analyzeBestMarketForContract(
           const underExpected = t * 10;
           const overExpected = ((9 - t) / 10) * 100;
 
-          if (underRate - underExpected > bestEdge) {
+          const underZ = binomialZScore(underRate, underExpected, sampleSize);
+          if (underZ > bestZ) {
+            bestZ = underZ;
             bestEdge = underRate - underExpected;
             bestSide = `Under ${t}`;
             bestHitRate = underRate;
             bestExpectation = underExpected;
           }
-          if (overRate - overExpected > bestEdge) {
+          const overZ = binomialZScore(overRate, overExpected, sampleSize);
+          if (overZ > bestZ) {
+            bestZ = overZ;
             bestEdge = overRate - overExpected;
             bestSide = `Over ${t}`;
             bestHitRate = overRate;
@@ -326,6 +348,7 @@ export async function analyzeBestMarketForContract(
           }
         }
         suggestions.push({
+          confidence: bestZ,
           digitPercentages: percentages,
           edge: bestEdge,
           expectation: bestExpectation,
@@ -335,7 +358,8 @@ export async function analyzeBestMarketForContract(
           symbol,
         });
       } else if (kind === "matches_differs") {
-        let bestEdge = -Infinity;
+        let bestZ = -Infinity;
+        let bestEdge = 0;
         let bestSide = "Differs 5";
         let bestHitRate = 90;
         let bestExpectation = 90;
@@ -346,13 +370,17 @@ export async function analyzeBestMarketForContract(
           const matchRate = (matchCount / safeTotal) * 100;
           const differRate = (differCount / safeTotal) * 100;
 
-          if (matchRate - 10 > bestEdge) {
+          const matchZ = binomialZScore(matchRate, 10, sampleSize);
+          if (matchZ > bestZ) {
+            bestZ = matchZ;
             bestEdge = matchRate - 10;
             bestSide = `Matches ${d}`;
             bestHitRate = matchRate;
             bestExpectation = 10;
           }
-          if (differRate - 90 > bestEdge) {
+          const differZ = binomialZScore(differRate, 90, sampleSize);
+          if (differZ > bestZ) {
+            bestZ = differZ;
             bestEdge = differRate - 90;
             bestSide = `Differs ${d}`;
             bestHitRate = differRate;
@@ -360,6 +388,7 @@ export async function analyzeBestMarketForContract(
           }
         }
         suggestions.push({
+          confidence: bestZ,
           digitPercentages: percentages,
           edge: bestEdge,
           expectation: bestExpectation,
@@ -376,10 +405,12 @@ export async function analyzeBestMarketForContract(
 
   if (allFailed) throw new Error("Could not reach Deriv's market data — check your connection");
 
-  return suggestions.sort((a, b) => {
-    if (b.edge !== a.edge) return b.edge - a.edge;
-    return b.hitRate - a.hitRate;
-  });
+  return suggestions
+    .sort((a, b) => {
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      return b.edge - a.edge;
+    })
+    .map(({ confidence: _confidence, ...rest }) => rest);
 }
 
 // ─── Stake recommenders ───────────────────────────────────────────────────────
