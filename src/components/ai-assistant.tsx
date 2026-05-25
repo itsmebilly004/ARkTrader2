@@ -406,6 +406,7 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 launchingPresetId={launchingPresetId}
                 onLaunch={handleLaunchBestBot}
+                onRerun={() => setBotRefreshKey((k) => k + 1)}
               />
             )}
 
@@ -419,6 +420,7 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 onKindChange={handleManualKindChange}
                 onLaunch={handleLaunchManualTrader}
+                onRerun={() => setManualRefreshKey((k) => k + 1)}
               />
             )}
 
@@ -479,6 +481,7 @@ function BestBotView({
   currency,
   launchingPresetId,
   onLaunch,
+  onRerun,
 }: {
   loading: boolean;
   error: string | null;
@@ -488,6 +491,7 @@ function BestBotView({
   currency: string;
   launchingPresetId: string | null;
   onLaunch: (bot: BotOpportunity) => void;
+  onRerun: () => void;
 }) {
   const topBot = opportunities[0] ?? null;
   const rest = opportunities.slice(1, 5);
@@ -499,21 +503,29 @@ function BestBotView({
   }
 
   if (error) {
-    return <ErrorCard message={error} />;
+    return (
+      <div className="space-y-3">
+        <ErrorCard message={error} />
+        <RerunButton onRerun={onRerun} loading={loading} />
+        <AccuracyDisclaimer />
+      </div>
+    );
   }
 
   if (!topBot) {
     return (
-      <InfoCard title="No data yet">
-        Click Rerun to start the bot analysis.
-      </InfoCard>
+      <div className="space-y-3">
+        <InfoCard title="No data yet">
+          Click Rerun to start the bot analysis.
+        </InfoCard>
+        <RerunButton onRerun={onRerun} loading={loading} />
+        <AccuracyDisclaimer />
+      </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <AccuracyDisclaimer />
-
       {/* Top pick */}
       <div className="rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-3 dark:border-[#1f403f] dark:bg-[#102726]">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#4bb4b3]">
@@ -623,6 +635,9 @@ function BestBotView({
           ))}
         </div>
       )}
+
+      <RerunButton onRerun={onRerun} loading={loading} />
+      <AccuracyDisclaimer />
     </div>
   );
 }
@@ -638,6 +653,7 @@ function ManualTraderView({
   currency,
   onKindChange,
   onLaunch,
+  onRerun,
 }: {
   loading: boolean;
   error: string | null;
@@ -647,6 +663,7 @@ function ManualTraderView({
   currency: string;
   onKindChange: (kind: ManualContractKind | null) => void;
   onLaunch: () => void;
+  onRerun: () => void;
 }) {
   const topMarket = suggestions[0] ?? null;
   const rest = suggestions.slice(1, 7);
@@ -696,8 +713,6 @@ function ManualTraderView({
           {MANUAL_KIND_LABELS[kind]}
         </span>
       </div>
-
-      <AccuracyDisclaimer />
 
       {loading && <LoadingCard message={`Scanning 10 markets for ${MANUAL_KIND_LABELS[kind]} edge…`} />}
       {!loading && error && <ErrorCard message={error} />}
@@ -803,6 +818,9 @@ function ManualTraderView({
           Click the Rerun button to scan markets.
         </InfoCard>
       )}
+
+      {!loading && <RerunButton onRerun={onRerun} loading={loading} />}
+      <AccuracyDisclaimer />
     </div>
   );
 }
@@ -894,6 +912,20 @@ function MemoryView({
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function RerunButton({ onRerun, loading }: { onRerun: () => void; loading: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onRerun}
+      disabled={loading}
+      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#d7dce0] bg-white px-4 py-2 text-xs font-semibold text-[#42505b] transition hover:border-[#4bb4b3] hover:bg-[#eef9f8] hover:text-[#0f766e] disabled:opacity-50 dark:border-[#2a2f35] dark:bg-[#141719] dark:text-[#c9d0d7] dark:hover:border-[#4bb4b3] dark:hover:bg-[#102726] dark:hover:text-[#8be6e4]"
+    >
+      <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+      Rerun analysis
+    </button>
+  );
+}
 
 function AccuracyDisclaimer() {
   return (
