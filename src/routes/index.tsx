@@ -14,6 +14,7 @@ import {
 } from "@/lib/deriv";
 import { isDigitTrade } from "@/lib/trade-types";
 import { calculateDigitStats, digitsFromPrices } from "@/lib/digit-stats";
+import { consumeManualTradePickup, type ManualTradePickup } from "@/lib/manual-trade-pickup";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -32,12 +33,20 @@ export const Route = createFileRoute("/")({
 function Index() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [symbol, setSymbol] = useState(
-    () => readRememberedMarket(undefined, "manual", "1HZ100V") ?? "1HZ100V",
-  );
+  // Consume AI-assistant pickup once on mount (clears sessionStorage so a refresh starts clean).
+  const [aiPickup] = useState<ManualTradePickup | null>(() => consumeManualTradePickup());
+  const [symbol, setSymbol] = useState<string>(() => {
+    if (aiPickup?.symbol) {
+      rememberMarketSelection(undefined, "manual", aiPickup.symbol);
+      return aiPickup.symbol;
+    }
+    return readRememberedMarket(undefined, "manual", "1HZ100V") ?? "1HZ100V";
+  });
   const [price, setPrice] = useState<number | null>(null);
   const [tickPrices, setTickPrices] = useState<number[]>([]);
-  const [tradeType, setTradeType] = useState<TradeCategory>("accumulator");
+  const [tradeType, setTradeType] = useState<TradeCategory>(
+    () => aiPickup?.tradeType ?? "accumulator",
+  );
   const [barriers, setBarriers] = useState<{
     breached?: boolean;
     entry: number | null;
@@ -68,10 +77,16 @@ function Index() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
+    // If the AI assistant handed off a symbol, persist it for this user so the
+    // remembered-market effect doesn't immediately overwrite the AI's pick.
+    if (aiPickup?.symbol) {
+      rememberMarketSelection(user?.id, "manual", aiPickup.symbol);
+      return;
+    }
     const remembered = readRememberedMarket(user?.id, "manual");
     if (!remembered) return;
     setSymbol((current) => (current === remembered ? current : remembered));
-  }, [user?.id]);
+  }, [aiPickup, user?.id]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -255,6 +270,8 @@ function Index() {
               <TradePanel
                 market={symbol}
                 lastPrice={price}
+                initialStake={aiPickup?.stake}
+                initialTradeType={aiPickup?.tradeType}
                 onAccumulatorBarriers={handleAccumulatorBarriers}
                 onMarketChange={handleMarketChange}
                 onTradeTypeChange={setTradeType}
@@ -314,6 +331,8 @@ function Index() {
               <TradePanel
                 market={symbol}
                 lastPrice={price}
+                initialStake={aiPickup?.stake}
+                initialTradeType={aiPickup?.tradeType}
                 onAccumulatorBarriers={handleAccumulatorBarriers}
                 onMarketChange={handleMarketChange}
                 onTradeTypeChange={setTradeType}

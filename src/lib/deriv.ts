@@ -365,6 +365,41 @@ export async function fetchTicks(symbol: string, count = 500): Promise<TickPoint
   return ticks;
 }
 
+export async function publicSendBatch(
+  payloads: Array<Record<string, unknown>>,
+  options?: { timeoutMs?: number },
+): Promise<Array<DerivMessage | Error>> {
+  const timeoutMs = options?.timeoutMs ?? 12000;
+  return Promise.all(
+    payloads.map(async (payload, index): Promise<DerivMessage | Error> => {
+      const reqId = Number(payload.req_id ?? index + 1);
+      try {
+        if (payload.ticks_history) {
+          const symbol = String(payload.ticks_history);
+          const count = Number(payload.count ?? 500);
+          const ticks = await Promise.race([
+            fetchTicks(symbol, count),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Request timed out")), timeoutMs),
+            ),
+          ]);
+          return {
+            req_id: reqId,
+            msg_type: "history",
+            history: {
+              prices: ticks.map((t) => String(t.value)),
+              times: ticks.map((t) => String(t.time)),
+            },
+          } as DerivMessage;
+        }
+        return { req_id: reqId, ...(await send(payload)) };
+      } catch (err) {
+        return err instanceof Error ? err : new Error(String(err));
+      }
+    }),
+  );
+}
+
 export async function fetchCandles(
   symbol: string,
   granularity: number,

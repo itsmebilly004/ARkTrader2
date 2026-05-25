@@ -50,7 +50,9 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(Select-String -NotMatch \"arktrader-hub\")",
       "Bash(del *)",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

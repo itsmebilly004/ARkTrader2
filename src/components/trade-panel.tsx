@@ -83,6 +83,10 @@ type ProposalQuote = {
 interface TradePanelProps {
   market: string;
   lastPrice?: number | null;
+  /** AI-suggested opening stake — applied as the lazy initial value for the stake input. */
+  initialStake?: number;
+  /** AI-suggested trade type — applied as the lazy initial selected trade type. */
+  initialTradeType?: TradeCategory;
   onAccumulatorBarriers?: (b: ChartOverlay) => void;
   onMarketChange?: (market: string) => void;
   onTradeTypeChange?: (tradeType: TradeCategory) => void;
@@ -147,6 +151,8 @@ function TradingConnectionBadge({
 export function TradePanel({
   market,
   lastPrice,
+  initialStake,
+  initialTradeType,
   onAccumulatorBarriers,
   onMarketChange,
   onTradeTypeChange,
@@ -158,9 +164,11 @@ export function TradePanel({
   const token = account?.deriv_token ?? null;
   const tradeCurrency = currency || account?.currency || "";
 
-  const [selectedTradeType, setSelectedTradeType] = useState<TradeCategory>("accumulator");
+  const [selectedTradeType, setSelectedTradeType] = useState<TradeCategory>(
+    () => initialTradeType ?? "accumulator",
+  );
   const [selectedSide, setSelectedSide] = useState("buy");
-  const [stake, setStake] = useState(10);
+  const [stake, setStake] = useState(() => initialStake ?? 10);
   const [payoutMode, setPayoutMode] = useState<"stake" | "payout">("stake");
   const [duration, setDuration] = useState(5);
   const [durationUnit, setDurationUnit] = useState<"t" | "s" | "m">("t");

@@ -1,11 +1,29 @@
 import {
   clearCurrentBotPresetId,
+  normalizeBotBuilderSettings,
   persistCurrentBotPresetId,
+  persistCurrentBotSettings,
   persistPresetWorkspaceXml,
   readPresetWorkspaceXml,
 } from "@/lib/bot-builder-state";
+import { TRADING_BOT_ASSETS } from "@/lib/trading-bot-database";
+import { fetchBotXmlFromDatabase } from "@/lib/bot-xml-storage";
+import {
+  extractSettingsFromXmlText,
+  writeSavedWorkspaceXml,
+} from "@/external/bot-builder/workspace-persistence";
 import { writeRecentWorkspaceXml } from "@/external/bot-builder/recent-workspaces";
-import { writeSavedWorkspaceXml } from "@/external/bot-builder/workspace-persistence";
+
+// ─── Bot-deployed event ───────────────────────────────────────────────────────
+
+export const BOT_DEPLOYED_EVENT = "arktrader:bot-deployed";
+
+export type BotDeployedEventDetail = {
+  presetId: string;
+  source: "ai-assistant" | "trading-bots";
+};
+
+// ─── Builder memory import ────────────────────────────────────────────────────
 
 export type BuilderMemoryImport = {
   name: string;
@@ -57,4 +75,46 @@ export async function importBotXmlIntoBuilderMemory(
 
   writeSavedWorkspaceXml(userId, workspaceXml);
   await writeRecentWorkspaceXml(workspaceXml, input.name);
+}
+
+// ─── AI-assisted deployment ───────────────────────────────────────────────────
+
+export async function deployBotFromAiSuggestion({
+  userId,
+  presetId,
+  stake,
+  martingale,
+}: {
+  martingale: number;
+  presetId: string;
+  stake: number;
+  userId: string;
+}): Promise<void> {
+  const asset = TRADING_BOT_ASSETS.find((a) => a.id === presetId);
+  if (!asset) {
+    throw new Error(`Bot preset "${presetId}" is not registered in the trading bot library.`);
+  }
+
+  const xml = await fetchBotXmlFromDatabase(presetId);
+
+  await importBotXmlIntoBuilderMemory(userId, { name: asset.name, presetId, xml });
+
+  const baseSettings = extractSettingsFromXmlText(xml);
+  if (!baseSettings) throw new Error("Could not parse bot XML settings.");
+
+  const baseMaxStake = baseSettings.maxStake;
+  const overridden = normalizeBotBuilderSettings({
+    ...baseSettings,
+    martingale,
+    maxStake: Math.max(baseMaxStake, stake * Math.max(1, martingale) * 8),
+    stake,
+  });
+
+  persistCurrentBotSettings(userId, overridden, { presetId });
+
+  window.dispatchEvent(
+    new CustomEvent<BotDeployedEventDetail>(BOT_DEPLOYED_EVENT, {
+      detail: { presetId, source: "ai-assistant" },
+    }),
+  );
 }

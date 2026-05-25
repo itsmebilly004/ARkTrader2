@@ -228,6 +228,7 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
   const [memoryReady, setMemoryReady] = useState(false);
 
   const runningRef = useRef(false);
+  const interRunDelayResolveRef = useRef<(() => void) | null>(null);
   const statsRef = useRef<BotMonitorStats>(EMPTY_BOT_MONITOR_STATS);
 
   // Keep statsRef in sync for the run loop to read without stale closure issues.
@@ -283,6 +284,8 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
   const startBot = useCallback(async () => {
     if (status === "running") {
       runningRef.current = false;
+      interRunDelayResolveRef.current?.();
+      interRunDelayResolveRef.current = null;
       setStatus("stopped");
       addJournal(
         "Stop requested. The bot will stop after the current contract settles.",
@@ -369,6 +372,7 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
             });
             const proposalId = String(proposal.proposal?.id ?? "");
             const askPrice = positiveNumberFrom(proposal.proposal?.ask_price, stake) ?? stake;
+            if (!runningRef.current) break;
             const buy = await buyProposal(proposalId, askPrice, {
               ...context,
               contractType: String(payload.contract_type ?? context.contractType),
@@ -489,7 +493,16 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
             ? clampNumber(stake * snapshot.martingale, 0.35, snapshot.maxStake)
             : snapshot.stake;
 
-        await sleep(1000);
+        // Interruptible cool-down between trades — gives the user time to click Stop
+        // on fast-tick markets (1HZ10V/100V) where settlement can be under 1 second.
+        await new Promise<void>((resolve) => {
+          interRunDelayResolveRef.current = resolve;
+          window.setTimeout(() => {
+            interRunDelayResolveRef.current = null;
+            resolve();
+          }, 1500);
+        });
+        interRunDelayResolveRef.current = null;
       }
 
       await refreshBalances("bot-runner-run-complete", account.account_id).catch((err) => {
