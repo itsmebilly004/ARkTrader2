@@ -36,6 +36,7 @@ import {
   analyzeBestMarketForContract,
   recommendManualStake,
   recommendStakeAndMartingale,
+  type AnalysisProgress,
   type BotOpportunity,
   type ManualContractKind,
   type ManualMarketSuggestion,
@@ -92,7 +93,8 @@ export function AiAssistant({
   const [botOpportunities, setBotOpportunities] = useState<BotOpportunity[]>([]);
   const [botLoading, setBotLoading] = useState(false);
   const [botError, setBotError] = useState<string | null>(null);
-  const [botRefreshKey, setBotRefreshKey] = useState(0);
+  const [botHasRun, setBotHasRun] = useState(false);
+  const [botProgress, setBotProgress] = useState<AnalysisProgress | null>(null);
   const [botLastAnalysisAt, setBotLastAnalysisAt] = useState<Date | null>(null);
   const [launchingPresetId, setLaunchingPresetId] = useState<string | null>(null);
 
@@ -101,7 +103,8 @@ export function AiAssistant({
   const [manualSuggestions, setManualSuggestions] = useState<ManualMarketSuggestion[]>([]);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
-  const [manualRefreshKey, setManualRefreshKey] = useState(0);
+  const [manualHasRun, setManualHasRun] = useState(false);
+  const [manualProgress, setManualProgress] = useState<AnalysisProgress | null>(null);
   const [manualLastAnalysisAt, setManualLastAnalysisAt] = useState<Date | null>(null);
 
   const dragRef = useRef<{
@@ -163,61 +166,59 @@ export function AiAssistant({
     setPosition(clampPosition(stored, viewport, buttonSize));
   }, [buttonSize, showBotMonitor, user?.id, viewport]);
 
-  // ── Best Bot analysis effect ─────────────────────────────────────────────────
+  // ── Manual analysis run (explicit, user-triggered) ───────────────────────────
 
-  useEffect(() => {
-    if (!open || tab !== "best-bot") return;
-    let cancelled = false;
+  async function runBotAnalysis() {
+    if (botLoading) return;
     setBotLoading(true);
     setBotError(null);
-    analyzeBestBotOpportunities()
-      .then((result) => {
-        if (cancelled) return;
-        setBotOpportunities(result);
-        setBotLastAnalysisAt(new Date());
-        recordActivity(user?.id, {
-          message: `AI bot scan: ${result.length} presets ranked.`,
-          meta: { view: "best-bot" },
-          type: "assistant",
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setBotError(err instanceof Error ? err.message : "Analysis could not be completed.");
-      })
-      .finally(() => {
-        if (!cancelled) setBotLoading(false);
+    setBotHasRun(true);
+    setBotProgress({ pct: 0, stage: "Starting AI analysis…" });
+    try {
+      const result = await analyzeBestBotOpportunities({
+        forceRefresh: true,
+        onProgress: (p) => setBotProgress(p),
       });
-    return () => { cancelled = true; };
-  }, [open, tab, botRefreshKey, user?.id]);
+      setBotOpportunities(result);
+      setBotLastAnalysisAt(new Date());
+      recordActivity(user?.id, {
+        message: `AI bot scan: ${result.length} presets ranked.`,
+        meta: { view: "best-bot" },
+        type: "assistant",
+      });
+    } catch (err) {
+      setBotError(err instanceof Error ? err.message : "Analysis could not be completed.");
+    } finally {
+      setBotLoading(false);
+      setBotProgress(null);
+    }
+  }
 
-  // ── Manual analysis effect ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!open || tab !== "manual" || !manualKind) return;
-    let cancelled = false;
+  async function runManualAnalysis() {
+    if (manualLoading || !manualKind) return;
     setManualLoading(true);
     setManualError(null);
-    analyzeBestMarketForContract(manualKind)
-      .then((result) => {
-        if (cancelled) return;
-        setManualSuggestions(result);
-        setManualLastAnalysisAt(new Date());
-        recordActivity(user?.id, {
-          message: `AI manual scan: ${manualKind.replace("_", "/")} across ${result.length} markets.`,
-          meta: { kind: manualKind, view: "manual" },
-          type: "assistant",
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setManualError(err instanceof Error ? err.message : "Analysis could not be completed.");
-      })
-      .finally(() => {
-        if (!cancelled) setManualLoading(false);
+    setManualHasRun(true);
+    setManualProgress({ pct: 0, stage: "Starting AI analysis…" });
+    try {
+      const result = await analyzeBestMarketForContract(manualKind, {
+        forceRefresh: true,
+        onProgress: (p) => setManualProgress(p),
       });
-    return () => { cancelled = true; };
-  }, [open, tab, manualKind, manualRefreshKey, user?.id]);
+      setManualSuggestions(result);
+      setManualLastAnalysisAt(new Date());
+      recordActivity(user?.id, {
+        message: `AI manual scan: ${manualKind.replace("_", "/")} across ${result.length} markets.`,
+        meta: { kind: manualKind, view: "manual" },
+        type: "assistant",
+      });
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Analysis could not be completed.");
+    } finally {
+      setManualLoading(false);
+      setManualProgress(null);
+    }
+  }
 
   // ── Panel dimensions ──────────────────────────────────────────────────────────
 
@@ -320,6 +321,8 @@ export function AiAssistant({
     setManualSuggestions([]);
     setManualError(null);
     setManualLastAnalysisAt(null);
+    setManualHasRun(false);
+    setManualProgress(null);
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -350,10 +353,15 @@ export function AiAssistant({
               <button
                 type="button"
                 onClick={() => {
-                  if (tab === "best-bot") setBotRefreshKey((k) => k + 1);
-                  else if (tab === "manual") setManualRefreshKey((k) => k + 1);
+                  if (tab === "best-bot") void runBotAnalysis();
+                  else if (tab === "manual" && manualKind) void runManualAnalysis();
                 }}
-                disabled={tab === "memory"}
+                disabled={
+                  tab === "memory" ||
+                  (tab === "manual" && !manualKind) ||
+                  botLoading ||
+                  manualLoading
+                }
                 className="flex size-8 items-center justify-center rounded-full border border-[#d7dce0] text-[#51606c] transition hover:bg-[#f5f7f8] disabled:opacity-40 dark:border-[#2a2f35] dark:text-[#c9d0d7] dark:hover:bg-[#171a1d]"
                 aria-label="Rerun analysis"
               >
@@ -398,7 +406,9 @@ export function AiAssistant({
           <div className="h-[calc(100%-7.25rem)] overflow-y-auto px-4 py-4 text-sm">
             {tab === "best-bot" && (
               <BestBotView
+                hasRun={botHasRun}
                 loading={botLoading}
+                progress={botProgress}
                 error={botError}
                 opportunities={botOpportunities}
                 stakeRecommendation={stakeRecommendation}
@@ -406,13 +416,15 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 launchingPresetId={launchingPresetId}
                 onLaunch={handleLaunchBestBot}
-                onRerun={() => setBotRefreshKey((k) => k + 1)}
+                onRun={() => void runBotAnalysis()}
               />
             )}
 
             {tab === "manual" && (
               <ManualTraderView
+                hasRun={manualHasRun}
                 loading={manualLoading}
+                progress={manualProgress}
                 error={manualError}
                 kind={manualKind}
                 suggestions={manualSuggestions}
@@ -420,7 +432,7 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 onKindChange={handleManualKindChange}
                 onLaunch={handleLaunchManualTrader}
-                onRerun={() => setManualRefreshKey((k) => k + 1)}
+                onRun={() => void runManualAnalysis()}
               />
             )}
 
@@ -473,7 +485,9 @@ export function AiAssistant({
 // ─── Best Bot view ────────────────────────────────────────────────────────────
 
 function BestBotView({
+  hasRun,
   loading,
+  progress,
   error,
   opportunities,
   stakeRecommendation,
@@ -481,9 +495,11 @@ function BestBotView({
   currency,
   launchingPresetId,
   onLaunch,
-  onRerun,
+  onRun,
 }: {
+  hasRun: boolean;
   loading: boolean;
+  progress: AnalysisProgress | null;
   error: string | null;
   opportunities: BotOpportunity[];
   stakeRecommendation: StakeRecommendation | null;
@@ -491,14 +507,30 @@ function BestBotView({
   currency: string;
   launchingPresetId: string | null;
   onLaunch: (bot: BotOpportunity) => void;
-  onRerun: () => void;
+  onRun: () => void;
 }) {
   const topBot = opportunities[0] ?? null;
   const rest = opportunities.slice(1, 5);
 
   if (loading) {
     return (
-      <LoadingCard message="Scanning all bot presets across 500 recent ticks per market…" />
+      <div className="space-y-3">
+        <ProgressCard progress={progress} />
+      </div>
+    );
+  }
+
+  if (!hasRun) {
+    return (
+      <div className="space-y-3">
+        <IdlePrompt
+          title="Run the AI bot analysis"
+          description="The AI will pull 500 fresh ticks from every market, compute fair-value baselines, and rank bot presets by confidence-weighted edge. Takes about 10 seconds."
+          runLabel="Run AI analysis"
+          onRun={onRun}
+        />
+        <AccuracyDisclaimer />
+      </div>
     );
   }
 
@@ -506,7 +538,7 @@ function BestBotView({
     return (
       <div className="space-y-3">
         <ErrorCard message={error} />
-        <RerunButton onRerun={onRerun} loading={loading} />
+        <RerunButton onRerun={onRun} loading={loading} />
         <AccuracyDisclaimer />
       </div>
     );
@@ -518,7 +550,7 @@ function BestBotView({
         <InfoCard title="No data yet">
           Click Rerun to start the bot analysis.
         </InfoCard>
-        <RerunButton onRerun={onRerun} loading={loading} />
+        <RerunButton onRerun={onRun} loading={loading} />
         <AccuracyDisclaimer />
       </div>
     );
@@ -636,7 +668,7 @@ function BestBotView({
         </div>
       )}
 
-      <RerunButton onRerun={onRerun} loading={loading} />
+      <RerunButton onRerun={onRun} loading={loading} />
       <AccuracyDisclaimer />
     </div>
   );
@@ -645,7 +677,9 @@ function BestBotView({
 // ─── Manual Trader view ───────────────────────────────────────────────────────
 
 function ManualTraderView({
+  hasRun,
   loading,
+  progress,
   error,
   kind,
   suggestions,
@@ -653,9 +687,11 @@ function ManualTraderView({
   currency,
   onKindChange,
   onLaunch,
-  onRerun,
+  onRun,
 }: {
+  hasRun: boolean;
   loading: boolean;
+  progress: AnalysisProgress | null;
   error: string | null;
   kind: ManualContractKind | null;
   suggestions: ManualMarketSuggestion[];
@@ -663,7 +699,7 @@ function ManualTraderView({
   currency: string;
   onKindChange: (kind: ManualContractKind | null) => void;
   onLaunch: () => void;
-  onRerun: () => void;
+  onRun: () => void;
 }) {
   const topMarket = suggestions[0] ?? null;
   const rest = suggestions.slice(1, 7);
@@ -714,10 +750,20 @@ function ManualTraderView({
         </span>
       </div>
 
-      {loading && <LoadingCard message={`Scanning 10 markets × 500 ticks for ${MANUAL_KIND_LABELS[kind]} edge…`} />}
-      {!loading && error && <ErrorCard message={error} />}
+      {loading && <ProgressCard progress={progress} />}
 
-      {!loading && !error && topMarket && (
+      {!loading && !hasRun && (
+        <IdlePrompt
+          title={`Run the AI analysis on ${MANUAL_KIND_LABELS[kind]}`}
+          description={`The AI will pull 500 fresh ticks from each of the 10 synthetic digit markets, score every threshold/digit by statistical confidence, and surface the strongest ${MANUAL_KIND_LABELS[kind]} signal. Takes about 10 seconds.`}
+          runLabel="Run AI analysis"
+          onRun={onRun}
+        />
+      )}
+
+      {!loading && hasRun && error && <ErrorCard message={error} />}
+
+      {!loading && hasRun && !error && topMarket && (
         <>
           {/* Top market */}
           <div className="rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-3 dark:border-[#1f403f] dark:bg-[#102726]">
@@ -813,13 +859,13 @@ function ManualTraderView({
         </>
       )}
 
-      {!loading && !error && !topMarket && kind && (
+      {!loading && hasRun && !error && !topMarket && kind && (
         <InfoCard title="No results">
-          Click the Rerun button to scan markets.
+          Click Rerun to scan the markets again.
         </InfoCard>
       )}
 
-      {!loading && <RerunButton onRerun={onRerun} loading={loading} />}
+      {!loading && hasRun && <RerunButton onRerun={onRun} loading={loading} />}
       <AccuracyDisclaimer />
     </div>
   );
@@ -912,6 +958,66 @@ function MemoryView({
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function IdlePrompt({
+  title,
+  description,
+  runLabel,
+  onRun,
+}: {
+  title: string;
+  description: string;
+  runLabel: string;
+  onRun: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-5 text-center dark:border-[#1f403f] dark:bg-[#102726]">
+      <div className="rounded-full bg-white p-3 shadow-sm dark:bg-[#141719]">
+        <BrainCircuit className="size-6 text-[#4bb4b3]" />
+      </div>
+      <div className="space-y-1">
+        <div className="text-sm font-semibold text-[#172029] dark:text-[#f1f5f9]">{title}</div>
+        <p className="text-xs leading-5 text-[#42505b] dark:text-[#aab1b8]">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onRun}
+        className="flex items-center gap-2 rounded-xl bg-[#4bb4b3] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3aa09e]"
+      >
+        <Sparkles className="size-4" />
+        {runLabel}
+      </button>
+    </div>
+  );
+}
+
+function ProgressCard({ progress }: { progress: AnalysisProgress | null }) {
+  const pct = Math.round(Math.min(100, Math.max(0, (progress?.pct ?? 0) * 100)));
+  return (
+    <div className="space-y-3 rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-4 dark:border-[#1f403f] dark:bg-[#102726]">
+      <div className="flex items-center gap-2">
+        <Loader2 className="size-4 shrink-0 animate-spin text-[#4bb4b3]" />
+        <span className="text-sm font-semibold text-[#0f766e] dark:text-[#7ee0df]">
+          AI analysis in progress
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="text-xs leading-5 text-[#42505b] dark:text-[#aab1b8]">
+          {progress?.stage ?? "Starting…"}
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#d8eceb] dark:bg-[#1a2b2b]">
+          <div
+            className="h-full rounded-full bg-[#4bb4b3] transition-[width] duration-700 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="text-right text-[10px] font-mono text-[#62707c] dark:text-[#aab1b8]">
+          {pct}%
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RerunButton({ onRerun, loading }: { onRerun: () => void; loading: boolean }) {
   return (

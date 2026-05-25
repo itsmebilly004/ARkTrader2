@@ -55,7 +55,13 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(findstr /C:\"ai-assistant\")",
       "Bash(findstr /R \"scroll\\\\|tabs\\\\|table\\\\|button\")",
-      "Bash(findstr \"scroll tabs table button\")"
+      "Bash(findstr \"scroll tabs table button\")",
+      "Bash(findstr /V \"assets\\\\\\\\arktrader-hub\")",
+      "Bash(findstr /V \"Could not find a declaration\")",
+      "Bash(findstr \"ai-assistant.tsx market-analysis.ts\")",
+      "Bash(findstr /R \"^src\\\\\\\\\\\\\\\\components\\\\\\\\\\\\\\\\ai-assistant ^src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\market-analysis\")",
+      "Bash(findstr /C:\"src/components/ai-assistant\" /C:\"src/lib/market-analysis\")",
+      "Bash(findstr \"ai-assistant.tsx\")"
     ]
   }
 }

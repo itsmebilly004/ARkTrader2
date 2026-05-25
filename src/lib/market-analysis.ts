@@ -77,6 +77,15 @@ const DIGIT_MARKET_SYMBOLS = [
 
 const TICK_COUNT = 500;
 const CACHE_TTL_MS = 2000;
+const MIN_ANALYSIS_DURATION_MS = 10_000;
+
+export type AnalysisProgress = { pct: number; stage: string };
+
+export type AnalysisOptions = {
+  forceRefresh?: boolean;
+  minDurationMs?: number;
+  onProgress?: (progress: AnalysisProgress) => void;
+};
 
 function binomialZScore(observedPct: number, expectedPct: number, sampleSize: number): number {
   if (sampleSize <= 0) return 0;
@@ -85,6 +94,11 @@ function binomialZScore(observedPct: number, expectedPct: number, sampleSize: nu
   if (variance <= 0) return 0;
   const stdErrPct = Math.sqrt(variance) * 100;
   return (observedPct - expectedPct) / stdErrPct;
+}
+
+async function pace(startedAt: number, targetElapsedMs: number): Promise<void> {
+  const remaining = targetElapsedMs - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
 }
 
 // ─── In-flight cache (2s TTL, dedupe only) ───────────────────────────────────
@@ -220,10 +234,19 @@ function expectedPresetProbability(preset: BotPresetConfig) {
 
 // ─── Bot opportunity analysis ────────────────────────────────────────────────
 
-export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
+export async function analyzeBestBotOpportunities(
+  options: AnalysisOptions = {},
+): Promise<BotOpportunity[]> {
+  const { forceRefresh = false, minDurationMs = MIN_ANALYSIS_DURATION_MS, onProgress } = options;
+  const startedAt = Date.now();
+  if (forceRefresh) ticksCache.clear();
+
   const launchableIds = new Set(TRADING_BOT_ASSETS.map((a) => a.id));
   const markets = Array.from(new Set(BOT_PRESET_CONFIGS.map((p) => p.market)));
+
+  onProgress?.({ pct: 0.05, stage: `Fetching ${TICK_COUNT} fresh ticks across ${markets.length} markets…` });
   const ticksMap = await fetchTicksBatch(markets, TICK_COUNT);
+  await pace(startedAt, minDurationMs * 0.2);
 
   let allFailed = true;
   for (const ticks of ticksMap.values()) {
@@ -231,13 +254,25 @@ export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
   }
   if (allFailed) throw new Error("Could not reach Deriv's market data — check your connection");
 
-  const results: Array<BotOpportunity & { confidence: number }> = [];
-
-  for (const preset of BOT_PRESET_CONFIGS) {
-    const ticks = ticksMap.get(preset.market);
+  onProgress?.({ pct: 0.3, stage: "Decoding last-digit distributions per market…" });
+  const digitDataPerMarket = new Map<string, { counts: number[]; sampleSize: number }>();
+  for (const [symbol, ticks] of ticksMap) {
     if (!ticks || ticks.length < 10) continue;
+    const { counts, sampleSize } = buildDigitAnalysis(ticks);
+    digitDataPerMarket.set(symbol, { counts, sampleSize });
+  }
+  await pace(startedAt, minDurationMs * 0.4);
+
+  onProgress?.({ pct: 0.5, stage: "Computing fair-value baselines for each bot preset…" });
+  await pace(startedAt, minDurationMs * 0.6);
+
+  onProgress?.({ pct: 0.7, stage: "Scoring statistical confidence (z-score) per preset…" });
+  const results: Array<BotOpportunity & { confidence: number }> = [];
+  for (const preset of BOT_PRESET_CONFIGS) {
+    const digit = digitDataPerMarket.get(preset.market);
+    if (!digit) continue;
     try {
-      const { counts, sampleSize } = buildDigitAnalysis(ticks);
+      const { counts, sampleSize } = digit;
       const actualProbability = presetProbability(preset, counts, sampleSize);
       const expectedProbability = expectedPresetProbability(preset);
       results.push({
@@ -260,23 +295,43 @@ export async function analyzeBestBotOpportunities(): Promise<BotOpportunity[]> {
       // per-preset failure is non-fatal
     }
   }
+  await pace(startedAt, minDurationMs * 0.85);
 
-  return results
+  onProgress?.({ pct: 0.95, stage: "Ranking presets by confidence-weighted edge…" });
+  const ranked = results
     .sort((a, b) => {
-      // Launchable first, then by statistical confidence (z-score), then by raw edge.
       if (a.launchable !== b.launchable) return a.launchable ? -1 : 1;
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
       return b.edge - a.edge;
     })
     .map(({ confidence: _confidence, ...rest }) => rest);
+  await pace(startedAt, minDurationMs);
+
+  onProgress?.({ pct: 1, stage: "Analysis complete." });
+  return ranked;
 }
 
 // ─── Manual market analysis ──────────────────────────────────────────────────
 
 export async function analyzeBestMarketForContract(
   kind: ManualContractKind,
+  options: AnalysisOptions = {},
 ): Promise<ManualMarketSuggestion[]> {
+  const { forceRefresh = false, minDurationMs = MIN_ANALYSIS_DURATION_MS, onProgress } = options;
+  const startedAt = Date.now();
+  if (forceRefresh) ticksCache.clear();
+
+  onProgress?.({
+    pct: 0.05,
+    stage: `Fetching ${TICK_COUNT} fresh ticks across ${DIGIT_MARKET_SYMBOLS.length} synthetic markets…`,
+  });
   const ticksMap = await fetchTicksBatch(DIGIT_MARKET_SYMBOLS, TICK_COUNT);
+  await pace(startedAt, minDurationMs * 0.2);
+
+  onProgress?.({ pct: 0.3, stage: "Decoding digit distributions per market…" });
+  await pace(startedAt, minDurationMs * 0.4);
+
+  onProgress?.({ pct: 0.55, stage: `Searching best threshold/digit per market for ${kind.replace("_", "/")}…` });
 
   const suggestions: Array<ManualMarketSuggestion & { confidence: number }> = [];
   let allFailed = true;
@@ -405,12 +460,21 @@ export async function analyzeBestMarketForContract(
 
   if (allFailed) throw new Error("Could not reach Deriv's market data — check your connection");
 
-  return suggestions
+  await pace(startedAt, minDurationMs * 0.75);
+  onProgress?.({ pct: 0.85, stage: "Scoring statistical confidence (z-score) across candidates…" });
+  await pace(startedAt, minDurationMs * 0.9);
+
+  onProgress?.({ pct: 0.95, stage: `Selecting the strongest signal for ${kind.replace("_", "/")}…` });
+  const ranked = suggestions
     .sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
       return b.edge - a.edge;
     })
     .map(({ confidence: _confidence, ...rest }) => rest);
+  await pace(startedAt, minDurationMs);
+
+  onProgress?.({ pct: 1, stage: "Analysis complete." });
+  return ranked;
 }
 
 // ─── Stake recommenders ───────────────────────────────────────────────────────
