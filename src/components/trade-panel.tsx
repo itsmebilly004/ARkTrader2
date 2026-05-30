@@ -87,6 +87,16 @@ interface TradePanelProps {
   initialStake?: number;
   /** AI-suggested trade type — applied as the lazy initial selected trade type. */
   initialTradeType?: TradeCategory;
+  /** AI-suggested session take-profit — applied as the lazy initial value. */
+  initialTakeProfit?: number;
+  /** AI-suggested session stop-loss — applied as the lazy initial value. */
+  initialStopLoss?: number;
+  /** AI-suggested prediction digit (over/under, matches/differs). */
+  initialSelectedDigit?: number;
+  /** AI-suggested purchase direction to auto-execute (even/odd/over/under/...). */
+  initialSide?: string;
+  /** When true, automatically places ONE trade on `initialSide` once the account is ready. */
+  autoRun?: boolean;
   onAccumulatorBarriers?: (b: ChartOverlay) => void;
   onMarketChange?: (market: string) => void;
   onTradeTypeChange?: (tradeType: TradeCategory) => void;
@@ -153,6 +163,11 @@ export function TradePanel({
   lastPrice,
   initialStake,
   initialTradeType,
+  initialTakeProfit,
+  initialStopLoss,
+  initialSelectedDigit,
+  initialSide,
+  autoRun = false,
   onAccumulatorBarriers,
   onMarketChange,
   onTradeTypeChange,
@@ -173,10 +188,10 @@ export function TradePanel({
   const [duration, setDuration] = useState(5);
   const [durationUnit, setDurationUnit] = useState<"t" | "s" | "m">("t");
   const [barrier, setBarrier] = useState("+0.10");
-  const [selectedDigit, setSelectedDigit] = useState(5);
+  const [selectedDigit, setSelectedDigit] = useState(() => initialSelectedDigit ?? 5);
   const [multiplier, setMultiplier] = useState(100);
-  const [takeProfit, setTakeProfit] = useState<number>(0);
-  const [stopLoss, setStopLoss] = useState<number>(0);
+  const [takeProfit, setTakeProfit] = useState<number>(() => initialTakeProfit ?? 0);
+  const [stopLoss, setStopLoss] = useState<number>(() => initialStopLoss ?? 0);
   // Session-level P/L tally for binary contracts (rise/fall, digits, etc.).
   // Deriv's `limit_order` only applies to multiplier/accumulator contracts;
   // for everything else we honor take-profit / stop-loss client-side by
@@ -202,6 +217,7 @@ export function TradePanel({
   const pageLoadAuthorizationAttemptRef = useRef<string | null>(null);
   const closedRef = useRef(false);
   const autoSellInFlightRef = useRef(false);
+  const autoRunFiredRef = useRef(false);
 
   const config = tradeTypeConfig(selectedTradeType);
   const currentDigit =
@@ -516,6 +532,24 @@ export function TradePanel({
       void cleanupSubscription();
     }
   }, [account?.account_id, activeContract.status]);
+
+  // One-shot AI auto-execution: when the assistant hands off an autoRun pickup,
+  // place a single trade on the recommended side once the account is ready.
+  useEffect(() => {
+    if (!autoRun || autoRunFiredRef.current) return;
+    if (selectedTradeType === "accumulator") return;
+    if (!account || !token) return;
+    const sideValue = initialSide ?? config.sides[0]?.value;
+    const side = config.sides.find((item) => item.value === sideValue) ?? config.sides[0];
+    if (!side) return;
+    autoRunFiredRef.current = true;
+    const timer = window.setTimeout(() => {
+      toast.info(`AI auto-trade: ${side.label} on ${market}.`);
+      void handleBuy(side);
+    }, 900);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, account, token, selectedTradeType]);
 
   function buildPayload(
     side: string,

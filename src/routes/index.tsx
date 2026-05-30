@@ -272,6 +272,11 @@ function Index() {
                 lastPrice={price}
                 initialStake={aiPickup?.stake}
                 initialTradeType={aiPickup?.tradeType}
+                initialTakeProfit={aiPickup?.takeProfit}
+                initialStopLoss={aiPickup?.stopLoss}
+                initialSelectedDigit={aiPickup?.selectedDigit}
+                initialSide={aiPickup?.side}
+                autoRun={aiPickup?.autoRun}
                 onAccumulatorBarriers={handleAccumulatorBarriers}
                 onMarketChange={handleMarketChange}
                 onTradeTypeChange={setTradeType}
@@ -333,6 +338,11 @@ function Index() {
                 lastPrice={price}
                 initialStake={aiPickup?.stake}
                 initialTradeType={aiPickup?.tradeType}
+                initialTakeProfit={aiPickup?.takeProfit}
+                initialStopLoss={aiPickup?.stopLoss}
+                initialSelectedDigit={aiPickup?.selectedDigit}
+                initialSide={aiPickup?.side}
+                autoRun={aiPickup?.autoRun}
                 onAccumulatorBarriers={handleAccumulatorBarriers}
                 onMarketChange={handleMarketChange}
                 onTradeTypeChange={setTradeType}

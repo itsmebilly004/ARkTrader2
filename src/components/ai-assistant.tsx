@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import type { TradeCategory } from "@/lib/deriv";
+import { SYNTHETIC_MARKETS, type TradeCategory } from "@/lib/deriv";
 import {
   AlertTriangle,
   BrainCircuit,
@@ -45,7 +45,35 @@ import {
 } from "@/lib/market-analysis";
 import { deployBotFromAiSuggestion } from "@/lib/bot-builder-memory";
 import { setManualTradePickup } from "@/lib/manual-trade-pickup";
+import { useBotRunner } from "@/context/bot-runner-context";
 import { cn } from "@/lib/utils";
+
+// The 10 synthetic digit markets the AI scans / can trade.
+const MANUAL_MARKET_SYMBOLS = [
+  "R_10", "1HZ10V", "R_25", "1HZ25V", "R_50",
+  "1HZ50V", "R_75", "1HZ75V", "R_100", "1HZ100V",
+] as const;
+
+function marketLabel(symbol: string): string {
+  return SYNTHETIC_MARKETS.find((m) => m.symbol === symbol)?.name ?? symbol;
+}
+
+/** Maps an AI suggestion side label (e.g. "Over 4", "Differs 3", "Rise") to a
+ *  purchase direction + prediction digit understood by the trade engine. */
+function parseSuggestionSide(
+  kind: ManualContractKind,
+  sideLabel: string,
+): { selectedDigit: number; side: string } {
+  const lower = sideLabel.toLowerCase();
+  const digitMatch = sideLabel.match(/(\d)/);
+  const digit = digitMatch ? Number(digitMatch[1]) : 5;
+  if (kind === "even_odd") return { selectedDigit: 5, side: lower.startsWith("odd") ? "odd" : "even" };
+  if (kind === "over_under")
+    return { selectedDigit: digit, side: lower.startsWith("under") ? "under" : "over" };
+  if (kind === "matches_differs")
+    return { selectedDigit: digit, side: lower.startsWith("differs") ? "differs" : "matches" };
+  return { selectedDigit: 5, side: lower.startsWith("fall") ? "down" : "up" };
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +109,7 @@ export function AiAssistant({
 }) {
   const { user } = useAuth();
   const { balance: rawBalance, currency } = useDerivBalanceContext();
+  const { startBot, status: botRunnerStatus } = useBotRunner();
   const navigate = useNavigate();
   const balance = rawBalance ?? 0;
 
@@ -106,6 +135,18 @@ export function AiAssistant({
   const [manualHasRun, setManualHasRun] = useState(false);
   const [manualProgress, setManualProgress] = useState<AnalysisProgress | null>(null);
   const [manualLastAnalysisAt, setManualLastAnalysisAt] = useState<Date | null>(null);
+
+  // Best Bot preset inputs (set by the user before analysis, deployed on launch).
+  const [botStake, setBotStake] = useState(1);
+  const [botTakeProfit, setBotTakeProfit] = useState(0);
+  const [botStopLoss, setBotStopLoss] = useState(0);
+  const [botMartingale, setBotMartingale] = useState(2);
+
+  // Manual Trader preset inputs.
+  const [manualSymbol, setManualSymbol] = useState<string>("auto");
+  const [manualStake, setManualStake] = useState(1);
+  const [manualTakeProfit, setManualTakeProfit] = useState(0);
+  const [manualStopLoss, setManualStopLoss] = useState(0);
 
   const dragRef = useRef<{
     moved: boolean;
@@ -275,8 +316,8 @@ export function AiAssistant({
       toast.error("Sign in to deploy a bot.");
       return;
     }
-    if (!stakeRecommendation) {
-      toast.error("Could not compute stake recommendation.");
+    if (!(botStake > 0)) {
+      toast.error("Enter a stake before launching.");
       return;
     }
     setLaunchingPresetId(bot.presetId);
@@ -284,12 +325,16 @@ export function AiAssistant({
       await deployBotFromAiSuggestion({
         userId: user.id,
         presetId: bot.presetId,
-        stake: stakeRecommendation.stake,
-        martingale: stakeRecommendation.martingale,
+        stake: botStake,
+        martingale: botMartingale,
+        takeProfit: botTakeProfit,
+        stopLoss: botStopLoss,
       });
-      toast.success(`${bot.name} deployed with AI-recommended settings.`);
+      toast.success(`${bot.name} deployed. Auto-running with your presets…`);
       setOpen(false);
       await navigate({ to: "/bot-builder" });
+      // Kick off the bot run loop immediately with the deployed presets.
+      if (botRunnerStatus !== "running") void startBot();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to deploy bot.");
     } finally {
@@ -297,21 +342,40 @@ export function AiAssistant({
     }
   }
 
+  function applyBotSuggestion() {
+    if (!stakeRecommendation) return;
+    setBotStake(Number(stakeRecommendation.stake.toFixed(2)));
+    setBotMartingale(Number(stakeRecommendation.martingale.toFixed(2)));
+  }
+
   function handleLaunchManualTrader() {
-    if (!topManual || !manualKind || !manualStakeAdvice) return;
-    const tradeTypeMap: Record<ManualContractKind, string> = {
-      even_odd: "even_odd",
-      matches_differs: "matches_differs",
-      over_under: "over_under",
-      rise_fall: "rise_fall",
-    };
+    if (!manualKind) return;
+    // Use the AI's top market unless the user pinned a specific pair.
+    let target = topManual;
+    if (manualSymbol !== "auto") {
+      target = manualSuggestions.find((s) => s.symbol === manualSymbol) ?? topManual;
+    }
+    if (!target) {
+      toast.error("Run the analysis first to identify a market.");
+      return;
+    }
+    if (!(manualStake > 0)) {
+      toast.error("Enter a stake before launching.");
+      return;
+    }
+    const { side, selectedDigit } = parseSuggestionSide(manualKind, target.side);
     setManualTradePickup({
-      symbol: topManual.symbol,
-      tradeType: tradeTypeMap[manualKind] as TradeCategory,
-      stake: manualStakeAdvice.stake,
+      symbol: target.symbol,
+      tradeType: manualKind as TradeCategory,
+      stake: manualStake,
+      takeProfit: manualTakeProfit,
+      stopLoss: manualStopLoss,
+      side,
+      selectedDigit,
+      autoRun: true,
     });
-    rememberMarketSelection(user?.id, "manual", topManual.symbol);
-    toast.success(`Navigating to Manual Trader with ${topManual.marketLabel} pre-selected.`);
+    rememberMarketSelection(user?.id, "manual", target.symbol);
+    toast.success(`Launching auto-trade on ${target.marketLabel}.`);
     setOpen(false);
     void navigate({ to: "/" });
   }
@@ -417,6 +481,15 @@ export function AiAssistant({
                 launchingPresetId={launchingPresetId}
                 onLaunch={handleLaunchBestBot}
                 onRun={() => void runBotAnalysis()}
+                presetStake={botStake}
+                onPresetStake={setBotStake}
+                presetTakeProfit={botTakeProfit}
+                onPresetTakeProfit={setBotTakeProfit}
+                presetStopLoss={botStopLoss}
+                onPresetStopLoss={setBotStopLoss}
+                presetMartingale={botMartingale}
+                onPresetMartingale={setBotMartingale}
+                onApplySuggestion={applyBotSuggestion}
               />
             )}
 
@@ -433,6 +506,14 @@ export function AiAssistant({
                 onKindChange={handleManualKindChange}
                 onLaunch={handleLaunchManualTrader}
                 onRun={() => void runManualAnalysis()}
+                symbol={manualSymbol}
+                onSymbolChange={setManualSymbol}
+                presetStake={manualStake}
+                onPresetStake={setManualStake}
+                presetTakeProfit={manualTakeProfit}
+                onPresetTakeProfit={setManualTakeProfit}
+                presetStopLoss={manualStopLoss}
+                onPresetStopLoss={setManualStopLoss}
               />
             )}
 
@@ -496,6 +577,15 @@ function BestBotView({
   launchingPresetId,
   onLaunch,
   onRun,
+  presetStake,
+  onPresetStake,
+  presetTakeProfit,
+  onPresetTakeProfit,
+  presetStopLoss,
+  onPresetStopLoss,
+  presetMartingale,
+  onPresetMartingale,
+  onApplySuggestion,
 }: {
   hasRun: boolean;
   loading: boolean;
@@ -508,13 +598,49 @@ function BestBotView({
   launchingPresetId: string | null;
   onLaunch: (bot: BotOpportunity) => void;
   onRun: () => void;
+  presetStake: number;
+  onPresetStake: (n: number) => void;
+  presetTakeProfit: number;
+  onPresetTakeProfit: (n: number) => void;
+  presetStopLoss: number;
+  onPresetStopLoss: (n: number) => void;
+  presetMartingale: number;
+  onPresetMartingale: (n: number) => void;
+  onApplySuggestion: () => void;
 }) {
   const topBot = opportunities[0] ?? null;
   const rest = opportunities.slice(1, 5);
 
+  const presets = (
+    <>
+      <PresetInputsGrid
+        currency={currency}
+        stake={presetStake}
+        onStake={onPresetStake}
+        takeProfit={presetTakeProfit}
+        onTakeProfit={onPresetTakeProfit}
+        stopLoss={presetStopLoss}
+        onStopLoss={onPresetStopLoss}
+        extra={{
+          label: "Martingale (×)",
+          value: presetMartingale,
+          onChange: onPresetMartingale,
+          step: 0.05,
+        }}
+      />
+      {stakeRecommendation && (
+        <ApplySuggestionButton
+          label={`Apply AI suggestion · ${currency} ${stakeRecommendation.stake.toFixed(2)} · ×${stakeRecommendation.martingale.toFixed(2)}`}
+          onClick={onApplySuggestion}
+        />
+      )}
+    </>
+  );
+
   if (loading) {
     return (
       <div className="space-y-3">
+        {presets}
         <ProgressCard progress={progress} />
       </div>
     );
@@ -523,6 +649,7 @@ function BestBotView({
   if (!hasRun) {
     return (
       <div className="space-y-3">
+        {presets}
         <IdlePrompt
           title="Run the AI bot analysis"
           description="The AI will pull 500 fresh ticks from every market, compute fair-value baselines, and rank bot presets by confidence-weighted edge. Takes about 10 seconds."
@@ -537,6 +664,7 @@ function BestBotView({
   if (error) {
     return (
       <div className="space-y-3">
+        {presets}
         <ErrorCard message={error} />
         <RerunButton onRerun={onRun} loading={loading} />
         <AccuracyDisclaimer />
@@ -547,6 +675,7 @@ function BestBotView({
   if (!topBot) {
     return (
       <div className="space-y-3">
+        {presets}
         <InfoCard title="No data yet">
           Click Rerun to start the bot analysis.
         </InfoCard>
@@ -558,6 +687,7 @@ function BestBotView({
 
   return (
     <div className="space-y-3">
+      {presets}
       {/* Top pick */}
       <div className="rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-3 dark:border-[#1f403f] dark:bg-[#102726]">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#4bb4b3]">
@@ -620,8 +750,8 @@ function BestBotView({
         </InfoCard>
       )}
 
-      {/* Launch button */}
-      {topBot.launchable && stakeRecommendation && (
+      {/* Launch button — deploys the user's presets and auto-runs the bot. */}
+      {topBot.launchable && (
         <button
           type="button"
           onClick={() => onLaunch(topBot)}
@@ -633,7 +763,7 @@ function BestBotView({
           ) : (
             <Rocket className="size-4" />
           )}
-          Launch on {topBot.marketLabel}
+          Launch &amp; auto-run on {topBot.marketLabel}
         </button>
       )}
 
@@ -688,6 +818,14 @@ function ManualTraderView({
   onKindChange,
   onLaunch,
   onRun,
+  symbol,
+  onSymbolChange,
+  presetStake,
+  onPresetStake,
+  presetTakeProfit,
+  onPresetTakeProfit,
+  presetStopLoss,
+  onPresetStopLoss,
 }: {
   hasRun: boolean;
   loading: boolean;
@@ -700,6 +838,14 @@ function ManualTraderView({
   onKindChange: (kind: ManualContractKind | null) => void;
   onLaunch: () => void;
   onRun: () => void;
+  symbol: string;
+  onSymbolChange: (v: string) => void;
+  presetStake: number;
+  onPresetStake: (n: number) => void;
+  presetTakeProfit: number;
+  onPresetTakeProfit: (n: number) => void;
+  presetStopLoss: number;
+  onPresetStopLoss: (n: number) => void;
 }) {
   const topMarket = suggestions[0] ?? null;
   const rest = suggestions.slice(1, 7);
@@ -749,6 +895,17 @@ function ManualTraderView({
           {MANUAL_KIND_LABELS[kind]}
         </span>
       </div>
+
+      <MarketPairSelect value={symbol} onChange={onSymbolChange} />
+      <PresetInputsGrid
+        currency={currency}
+        stake={presetStake}
+        onStake={onPresetStake}
+        takeProfit={presetTakeProfit}
+        onTakeProfit={onPresetTakeProfit}
+        stopLoss={presetStopLoss}
+        onStopLoss={onPresetStopLoss}
+      />
 
       {loading && <ProgressCard progress={progress} />}
 
@@ -823,7 +980,7 @@ function ManualTraderView({
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#4bb4b3] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3aa09e]"
           >
             <Rocket className="size-4" />
-            Launch on Manual Trader
+            Launch &amp; auto-trade
           </button>
 
           {/* Ranked list */}
@@ -958,6 +1115,128 @@ function MemoryView({
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function PresetField({
+  label,
+  value,
+  onChange,
+  min,
+  step,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  step?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[10px] text-[#6b7280] dark:text-[#9ca3af]">{label}</span>
+      <input
+        type="number"
+        min={min}
+        step={step}
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-0.5 h-8 w-full rounded-md border border-[#d7dce0] bg-white px-2 text-center font-mono text-sm text-[#172029] outline-none focus:border-[#4bb4b3] dark:border-[#2a2f35] dark:bg-[#101214] dark:text-[#f1f5f9]"
+      />
+    </label>
+  );
+}
+
+function PresetInputsGrid({
+  currency,
+  stake,
+  onStake,
+  takeProfit,
+  onTakeProfit,
+  stopLoss,
+  onStopLoss,
+  extra,
+}: {
+  currency: string;
+  stake: number;
+  onStake: (n: number) => void;
+  takeProfit: number;
+  onTakeProfit: (n: number) => void;
+  stopLoss: number;
+  onStopLoss: (n: number) => void;
+  extra?: { label: string; value: number; onChange: (n: number) => void; step?: number };
+}) {
+  return (
+    <div className="rounded-xl border border-[#e7eaee] bg-[#f7f9fa] p-3 dark:border-[#24282d] dark:bg-[#141719]">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#64707c] dark:text-[#aab1b8]">
+        Your trade presets
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <PresetField label={`Stake (${currency})`} value={stake} onChange={onStake} min={0.35} step={0.01} />
+        {extra ? (
+          <PresetField
+            label={extra.label}
+            value={extra.value}
+            onChange={extra.onChange}
+            min={0}
+            step={extra.step ?? 0.05}
+          />
+        ) : (
+          <div />
+        )}
+        <PresetField
+          label={`Take profit (${currency})`}
+          value={takeProfit}
+          onChange={onTakeProfit}
+          min={0}
+          step={0.01}
+        />
+        <PresetField
+          label={`Stop loss (${currency})`}
+          value={stopLoss}
+          onChange={onStopLoss}
+          min={0}
+          step={0.01}
+        />
+      </div>
+      <p className="mt-2 text-[10px] text-[#62707c] dark:text-[#aab1b8]">
+        Set these before you analyse. Launch deploys them into the trade panel and executes automatically.
+      </p>
+    </div>
+  );
+}
+
+function MarketPairSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="block rounded-xl border border-[#e7eaee] bg-[#f7f9fa] p-3 dark:border-[#24282d] dark:bg-[#141719]">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64707c] dark:text-[#aab1b8]">
+        Trading pair
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 h-9 w-full rounded-md border border-[#d7dce0] bg-white px-2 text-sm text-[#172029] outline-none focus:border-[#4bb4b3] dark:border-[#2a2f35] dark:bg-[#101214] dark:text-[#f1f5f9]"
+      >
+        <option value="auto">Auto — let the AI pick the best market</option>
+        {MANUAL_MARKET_SYMBOLS.map((s) => (
+          <option key={s} value={s}>
+            {marketLabel(s)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ApplySuggestionButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#c6eeec] bg-[#eef9f8] px-4 py-2 text-xs font-semibold text-[#0f766e] transition hover:bg-[#e0f4f3] dark:border-[#1f403f] dark:bg-[#102726] dark:text-[#8be6e4] dark:hover:bg-[#143432]"
+    >
+      <Sparkles className="size-3.5" />
+      {label}
+    </button>
+  );
+}
 
 function IdlePrompt({
   title,

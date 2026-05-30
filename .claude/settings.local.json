@@ -61,7 +61,12 @@
       "Bash(findstr \"ai-assistant.tsx market-analysis.ts\")",
       "Bash(findstr /R \"^src\\\\\\\\\\\\\\\\components\\\\\\\\\\\\\\\\ai-assistant ^src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\market-analysis\")",
       "Bash(findstr /C:\"src/components/ai-assistant\" /C:\"src/lib/market-analysis\")",
-      "Bash(findstr \"ai-assistant.tsx\")"
+      "Bash(findstr \"ai-assistant.tsx\")",
+      "Bash(xargs wc -l)",
+      "Bash(break)",
+      "Bash(grep -iE \"src[/\\\\\\\\\\\\\\\\]\\(components|lib|hooks|context|routes\\)[/\\\\\\\\\\\\\\\\]\")",
+      "Bash(rm -f tsconfig.check.json)",
+      "Bash(:)"
     ]
   }
 }

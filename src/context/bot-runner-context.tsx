@@ -26,9 +26,15 @@ import {
   type TradingAdapter,
   type TradeCategory,
 } from "@/lib/deriv";
-import { buyProposal, requestProposal, subscribeOpenContract } from "@/lib/deriv-trading-service";
+import { buyProposal, requestProposal } from "@/lib/deriv-trading-service";
 import { buildStandardProposalPayload } from "@/lib/trade-proposal-builder";
-import { numberFrom } from "@/lib/contract-state";
+import {
+  clampNumber,
+  positiveNumberFrom,
+  sleep,
+  waitForSettlement,
+  type Settlement,
+} from "@/lib/auto-trade";
 import {
   DEFAULT_BOT_MONITOR_JOURNAL,
   EMPTY_BOT_MONITOR_STATS,
@@ -41,14 +47,6 @@ import {
 const BOT_TRADE_MAX_ATTEMPTS = 2;
 const DERIV_TEMPORARY_PROCESSING_MESSAGE =
   "Sorry, an error occurred while processing your request.";
-
-type Settlement = {
-  entrySpot: number | null;
-  exitSpot: number | null;
-  payout: number;
-  profit: number;
-  status: "lost" | "open" | "won";
-};
 
 export type BotRunnerState = {
   connecting: boolean;
@@ -118,69 +116,6 @@ function contractTypeLabel(settings: BotBuilderSettings): string {
 }
 
 
-async function waitForSettlement(contractId: string): Promise<Settlement> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let unsubscribe: (() => Promise<void>) | undefined;
-    const timeout = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve({ entrySpot: null, exitSpot: null, payout: 0, profit: 0, status: "open" });
-      void unsubscribe?.();
-    }, 45000);
-
-    subscribeOpenContract(contractId, (contract) => {
-      const statusText = String(contract.status ?? "").toLowerCase();
-      const isSold =
-        contract.is_sold === 1 ||
-        contract.is_sold === true ||
-        contract.is_expired === 1 ||
-        contract.is_expired === true ||
-        statusText === "won" ||
-        statusText === "lost" ||
-        statusText === "sold";
-      if (!isSold || settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      const entrySpot = numberFrom(
-        contract.entry_spot,
-        contract.entry_tick,
-        contract.entry_tick_display_value,
-      );
-      const exitSpot = numberFrom(
-        contract.exit_spot,
-        contract.exit_tick,
-        contract.exit_tick_display_value,
-        contract.sell_spot,
-        contract.current_spot,
-        contract.current_tick,
-        contract.current_spot_display_value,
-      );
-      const profit = Number(contract.profit ?? 0);
-      const payout = Number(contract.payout ?? contract.sell_price ?? contract.bid_price ?? 0);
-      resolve({
-        entrySpot,
-        exitSpot,
-        payout: Number.isFinite(payout) ? payout : 0,
-        profit: Number.isFinite(profit) ? profit : 0,
-        status: profit >= 0 ? "won" : "lost",
-      });
-      void unsubscribe?.();
-    })
-      .then((off) => {
-        unsubscribe = off;
-      })
-      .catch((error) => {
-        window.clearTimeout(timeout);
-        reject(error);
-      });
-  });
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-}
-
 function shouldRetryBotTrade(error: unknown) {
   const message = getDerivTradingErrorMessage(error).toLowerCase();
   const code = String((error as { code?: unknown })?.code ?? "").toLowerCase();
@@ -191,21 +126,6 @@ function shouldRetryBotTrade(error: unknown) {
     code.includes("rate") ||
     code.includes("timeout")
   );
-}
-
-function positiveNumberFrom(...values: unknown[]) {
-  for (const value of values) {
-    if (value == null || value === "") continue;
-    const n = Number(value);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return null;
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
 }
 
 function formatTime() {

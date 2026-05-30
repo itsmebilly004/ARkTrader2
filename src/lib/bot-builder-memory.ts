@@ -84,10 +84,14 @@ export async function deployBotFromAiSuggestion({
   presetId,
   stake,
   martingale,
+  takeProfit = 0,
+  stopLoss = 0,
 }: {
   martingale: number;
   presetId: string;
   stake: number;
+  stopLoss?: number;
+  takeProfit?: number;
   userId: string;
 }): Promise<void> {
   const asset = TRADING_BOT_ASSETS.find((a) => a.id === presetId);
@@ -108,6 +112,8 @@ export async function deployBotFromAiSuggestion({
     martingale,
     maxStake: Math.max(baseMaxStake, stake * Math.max(1, martingale) * 8),
     stake,
+    stopLoss: Math.abs(stopLoss) || 0,
+    takeProfit: Math.max(0, takeProfit) || 0,
   });
 
   persistCurrentBotSettings(userId, overridden, { presetId });
