@@ -46,6 +46,16 @@ function uid(): string {
   return `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Deriv contract IDs are large, ascending integers (~10 digits). Seed a
+// realistic starting value and step it forward so transactions display numeric
+// IDs (e.g. "1098705859") instead of "sim_..." strings.
+let contractSeed = 1_000_000_000 + Math.floor(Math.random() * 99_000_000);
+
+function nextContractId(): string {
+  contractSeed += 1 + Math.floor(Math.random() * 9);
+  return String(contractSeed);
+}
+
 function simulatedBasePrice(symbol: string): number {
   const bases: Record<string, number> = {
     R_10: 600, R_25: 1800, R_50: 3200, R_75: 5300, R_100: 8500,
@@ -171,7 +181,7 @@ export async function buyProposal(
   const entry = proposalCache.get(proposalId);
   if (!entry) throw new Error("Proposal not found — cannot buy.");
 
-  const contractId = uid();
+  const contractId = nextContractId();
   const won = Math.random() < 0.55;
   const entrySpot = randomPrice(entry.symbol);
   const vol = entrySpot * 0.001;
