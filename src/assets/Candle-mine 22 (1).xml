@@ -1,22 +1,48 @@
-<xml xmlns="http://www.w3.org/1999/xhtml" collection="false">
+<xml xmlns="http://www.w3.org/1999/xhtml" collection="false" is_dbot="true">
   <variables>
     <variable type="" id="W4$:ZQCmEz#8+=4ysv5Y">stop loss</variable>
     <variable type="" id="j}8O`Vs+RJljIwPu-_:_">initial amount</variable>
     <variable type="" id="mXtFswo{p,|%W1:V-$+r">profit</variable>
     <variable type="" id="%L?;380E6Lr^3b.%}t5Q">win amount</variable>
     <variable type="" id="r;j5hdLRm`b6LFCDue7-">martingale</variable>
+    <variable type="" id="Sb*O~k1))d|/= K6:Mp,">current stake</variable>
   </variables>
-  <block type="trade" id="trade" x="-4" y="-45">
-    <field name="MARKET_LIST">synthetic_index</field>
-    <field name="SUBMARKET_LIST">random_index</field>
-    <field name="SYMBOL_LIST">R_100</field>
-    <field name="TRADETYPECAT_LIST">digits</field>
-    <field name="TRADETYPE_LIST">matchesdiffers</field>
-    <field name="TYPE_LIST">DIGITDIFF</field>
-    <field name="CANDLEINTERVAL_LIST">60</field>
-    <field name="TIME_MACHINE_ENABLED">FALSE</field>
-    <field name="RESTARTONERROR">TRUE</field>
+  <block type="trade_definition" id="trade_definition" deletable="false" x="-4" y="-45">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="cm_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">R_100</field>
+        <next>
+          <block type="trade_definition_tradetype" id="cm_tradetype" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">matchesdiffers</field>
+            <next>
+              <block type="trade_definition_contracttype" id="cm_contracttype" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITDIFF</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="cm_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="cm_restartbuysell" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="cm_restartonerror" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
     <statement name="INITIALIZATION">
+
       <block type="text_print" id="EDivDExvOQkw/~i;V+j8">
         <value name="TEXT">
           <shadow type="text" id="kv+MPF!f)#C[?TCT^dS(">
@@ -76,22 +102,29 @@
       </block>
     </statement>
     <statement name="SUBMARKET">
-      <block type="tradeOptions" id="e9H9Aque*t_l]hki@?v1">
+      <block type="trade_definition_tradeoptions" id="cm_tradeoptions">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
         <field name="DURATIONTYPE_LIST">t</field>
-        <field name="CURRENCY_LIST">USD</field>
-        <field name="BARRIEROFFSETTYPE_LIST">+</field>
-        <field name="SECONDBARRIEROFFSETTYPE_LIST">-</field>
         <value name="DURATION">
+          <shadow type="math_number" id="cm_dur_shadow">
+            <field name="NUM">1</field>
+          </shadow>
           <block type="math_number" id="~G^:]=.b`!T9.Il_vkLS">
             <field name="NUM">1</field>
           </block>
         </value>
         <value name="AMOUNT">
+          <shadow type="math_number" id="cm_amt_shadow">
+            <field name="NUM">1</field>
+          </shadow>
           <block type="variables_get" id="U7j6VStMd;ipx]Ouc..l">
             <field name="VAR" id="j}8O`Vs+RJljIwPu-_:_" variabletype="">initial amount</field>
           </block>
         </value>
         <value name="PREDICTION">
+          <shadow type="math_number" id="cm_pred_shadow">
+            <field name="NUM">0</field>
+          </shadow>
           <block type="last_digit" id="??5v2gCRvFhdio`k9/HO"></block>
         </value>
       </block>

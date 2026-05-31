@@ -69,7 +69,14 @@
       "Bash(:)",
       "PowerShell($f = \"src\\\\components\\\\ai-assistant.tsx\"; \"Lines: \" + \\(Get-Content $f | Measure-Object -Line\\).Lines; \"--- git status ---\"; git status --short $f; \"--- git diff stat ---\"; git diff --stat $f)",
       "PowerShell($f = \"src/components/ai-assistant.tsx\"; \"--- is tracked? ---\"; git ls-files $f; \"--- HEAD line count ---\"; git show \"HEAD:$f\" | Measure-Object -Line | Select-Object -ExpandProperty Lines; \"--- working tree vs HEAD diff lines ---\"; \\(git diff HEAD -- $f | Measure-Object -Line\\).Lines)",
-      "PowerShell($f = \"src/components/ai-assistant.tsx\"; \"--- raw git diff HEAD \\(first 30 lines\\) ---\"; git --no-pager diff HEAD -- $f 2>&1 | Select-Object -First 30)"
+      "PowerShell($f = \"src/components/ai-assistant.tsx\"; \"--- raw git diff HEAD \\(first 30 lines\\) ---\"; git --no-pager diff HEAD -- $f 2>&1 | Select-Object -First 30)",
+      "Bash(ls -la public/bots/)",
+      "Bash(wc -l public/bots/*.xml)",
+      "Bash(echo \"---exit $?---\")",
+      "PowerShell(Get-ChildItem -Path \"public\\\\bots\" -ErrorAction SilentlyContinue | Select-Object Name, Length; \"--- public root ---\"; Get-ChildItem -Path \"public\" -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(\"CWD: $\\(Get-Location\\)\"; Get-ChildItem public\\\\bots -Force -ErrorAction Continue | Format-Table Name,Length -AutoSize)",
+      "Bash(cat v.txt)",
+      "Bash(rm -f v.txt)"
     ]
   }
 }

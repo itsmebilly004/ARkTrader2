@@ -41,6 +41,17 @@ function isBlocklyXml(xml: string): boolean {
   return /<xml[\s>]/i.test(xml) || /<block[\s>]/i.test(xml);
 }
 
+/**
+ * True when the XML still uses the deprecated single-block trade format
+ * (`<block type="trade">` / `<block type="tradeOptions">`) instead of the modern
+ * `trade_definition` chain that this app's Blockly runtime registers. Such XML
+ * silently drops its trade-parameter blocks on load, so a cached copy in this
+ * format must be discarded in favour of the fresh (migrated) asset XML.
+ */
+function isLegacyTradeFormat(xml: string): boolean {
+  return /<block\s+type="trade"/i.test(xml) || /<block\s+type="tradeOptions"/i.test(xml);
+}
+
 export async function importBotXmlIntoBuilderMemory(
   userId: string | null | undefined,
   input: BuilderMemoryImport,
@@ -53,19 +64,24 @@ export async function importBotXmlIntoBuilderMemory(
   // If a presetId is given, check whether the user already has edits for this
   // preset saved. If so, restore those instead of wiping them with the fresh
   // deployment XML — this preserves any block-level adjustments the user made.
+  // Exception: a cached copy still in the deprecated `trade`/`tradeOptions`
+  // format would drop its trade-parameter blocks on load, so we ignore it and
+  // re-seed from the migrated asset XML instead.
   let workspaceXml = freshXml;
   if (input.presetId && userId) {
     const savedUserXml = readPresetWorkspaceXml(userId, input.presetId);
-    if (savedUserXml) {
+    if (savedUserXml && !isLegacyTradeFormat(savedUserXml)) {
       workspaceXml = savedUserXml;
     }
   }
 
   if (input.presetId) {
     persistCurrentBotPresetId(userId, input.presetId);
-    // Also seed the preset workspace store on first deploy so autosave can
-    // update it (the store may be empty if the user never deployed before).
-    if (!readPresetWorkspaceXml(userId, input.presetId)) {
+    // Seed (or refresh) the preset workspace store. We (re)write it when it's
+    // empty OR when the stored copy is in the broken legacy format, so a user
+    // who deployed the old version still gets the fixed strategy.
+    const cached = readPresetWorkspaceXml(userId, input.presetId);
+    if (!cached || isLegacyTradeFormat(cached)) {
       persistPresetWorkspaceXml(userId, input.presetId, freshXml);
     }
   } else {
