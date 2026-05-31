@@ -227,9 +227,11 @@ export function BotRunMonitorPanel({
             </div>
           )}
 
-          <div className="mt-3 bg-[#f1f2f3] pb-4 dark:bg-[#202020]">
-            <div className="px-5 pt-4 text-right text-[11px] underline">What&apos;s this?</div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-5 px-3 pt-3 text-center sm:grid-cols-3 sm:px-5 sm:gap-y-6">
+          <div className="mt-3 rounded-md bg-[#f1f2f3] pb-4 dark:bg-[#202020]">
+            <div className="px-5 pt-4 text-right text-[11px] font-medium text-[#4bb4b3] underline">
+              What&apos;s this?
+            </div>
+            <div className="grid grid-cols-3 gap-x-3 gap-y-5 px-3 pt-3 text-center sm:px-5 sm:gap-y-6">
               <SummaryMetric label="Total stake" value={formatMoney(stats.totalStake, currency)} />
               <SummaryMetric
                 label="Total payout"
@@ -542,7 +544,7 @@ function SummaryMetric({
     <div className="min-w-0">
       <div className="text-[11px] font-bold text-[#333] dark:text-[#eeeeee]">{label}</div>
       <div
-        className={cn("mt-3 break-words text-xs text-[#333] dark:text-[#eeeeee]", valueClassName)}
+        className={cn("mt-3 break-words text-xs text-[#6b7280] dark:text-[#b7b7b7]", valueClassName)}
       >
         {value}
       </div>

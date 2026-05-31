@@ -5,7 +5,12 @@ import { calculateDigitStats, digitsFromPrices } from "@/lib/digit-stats";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type ManualContractKind = "even_odd" | "matches_differs" | "over_under" | "rise_fall";
+export type ManualContractKind =
+  | "even_odd"
+  | "matches_differs"
+  | "over_under"
+  | "rise_fall"
+  | "accumulator";
 
 type OverUnderRecommendation = {
   expected: number;
@@ -190,6 +195,56 @@ function riseFallSuggestionFromTicks(symbol: string, ticks: TickPoint[]): Manual
   return { symbol, marketLabel, side, hitRate, expectation: 50, edge: hitRate - 50 };
 }
 
+// ─── Accumulator analysis ──────────────────────────────────────────────────────
+//
+// Accumulators reward calm markets: the contract keeps growing while the spot
+// stays inside a tight barrier band and busts the moment a tick jumps outside
+// it. The "best" accumulator market is therefore the one with the lowest
+// tick-to-tick volatility — we rank by mean absolute return and translate the
+// calmest market into the highest stability score.
+
+function accumulatorSuggestionsFromTicks(
+  ticksMap: Map<string, TickPoint[] | null>,
+): Array<ManualMarketSuggestion & { confidence: number }> {
+  const rows: Array<{ symbol: string; meanReturn: number }> = [];
+  for (const symbol of DIGIT_MARKET_SYMBOLS) {
+    const ticks = ticksMap.get(symbol);
+    if (!ticks || ticks.length < 10) continue;
+    let sum = 0;
+    let n = 0;
+    for (let i = 1; i < ticks.length; i++) {
+      const prev = ticks[i - 1].value;
+      const curr = ticks[i].value;
+      if (prev > 0) {
+        sum += Math.abs(curr - prev) / prev;
+        n += 1;
+      }
+    }
+    rows.push({ symbol, meanReturn: n > 0 ? sum / n : Infinity });
+  }
+
+  const finite = rows.filter((r) => Number.isFinite(r.meanReturn));
+  if (finite.length === 0) return [];
+  const minR = Math.min(...finite.map((r) => r.meanReturn));
+  const maxR = Math.max(...finite.map((r) => r.meanReturn));
+
+  return rows.map(({ symbol, meanReturn }) => {
+    const stability =
+      maxR > minR && Number.isFinite(meanReturn)
+        ? 50 + (50 * (maxR - meanReturn)) / (maxR - minR)
+        : 50;
+    return {
+      confidence: stability,
+      edge: stability - 50,
+      expectation: 50,
+      hitRate: stability,
+      marketLabel: marketLabelForSymbol(symbol),
+      side: "Buy",
+      symbol,
+    };
+  });
+}
+
 // ─── Martingale mode heuristic ────────────────────────────────────────────────
 
 function martingaleModeForPreset(preset: BotPresetConfig): "additive" | "multiplicative" {
@@ -336,6 +391,13 @@ export async function analyzeBestMarketForContract(
   const suggestions: Array<ManualMarketSuggestion & { confidence: number }> = [];
   let allFailed = true;
 
+  if (kind === "accumulator") {
+    const accs = accumulatorSuggestionsFromTicks(ticksMap);
+    if (accs.length > 0) {
+      allFailed = false;
+      suggestions.push(...accs);
+    }
+  } else
   for (const symbol of DIGIT_MARKET_SYMBOLS) {
     const ticks = ticksMap.get(symbol);
     if (!ticks || ticks.length < 10) continue;

@@ -11,12 +11,13 @@ import { toast } from "sonner";
 import { SYNTHETIC_MARKETS, type TradeCategory } from "@/lib/deriv";
 import {
   AlertTriangle,
-  BrainCircuit,
+  Bot,
   Loader2,
   RefreshCw,
   Rocket,
   Sparkles,
   X,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
@@ -72,6 +73,7 @@ function parseSuggestionSide(
     return { selectedDigit: digit, side: lower.startsWith("under") ? "under" : "over" };
   if (kind === "matches_differs")
     return { selectedDigit: digit, side: lower.startsWith("differs") ? "differs" : "matches" };
+  if (kind === "accumulator") return { selectedDigit: 5, side: "buy" };
   return { selectedDigit: 5, side: lower.startsWith("fall") ? "down" : "up" };
 }
 
@@ -89,6 +91,7 @@ const MANUAL_KIND_LABELS: Record<ManualContractKind, string> = {
   matches_differs: "Matches / Differs",
   over_under: "Over / Under",
   rise_fall: "Rise / Fall",
+  accumulator: "Accumulators",
 };
 
 const MANUAL_KIND_DESC: Record<ManualContractKind, string> = {
@@ -96,6 +99,7 @@ const MANUAL_KIND_DESC: Record<ManualContractKind, string> = {
   matches_differs: "Last digit matches a specific digit",
   over_under: "Last digit over or under a threshold",
   rise_fall: "Predict tick direction",
+  accumulator: "Grow a stake while price stays in range",
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -138,15 +142,17 @@ export function AiAssistant({
 
   // Best Bot preset inputs (set by the user before analysis, deployed on launch).
   const [botStake, setBotStake] = useState(1);
-  const [botTakeProfit, setBotTakeProfit] = useState(0);
-  const [botStopLoss, setBotStopLoss] = useState(0);
+  const [botTakeProfit, setBotTakeProfit] = useState(100);
+  const [botStopLoss, setBotStopLoss] = useState(30);
   const [botMartingale, setBotMartingale] = useState(2);
+  const [botRuns, setBotRuns] = useState(50);
 
   // Manual Trader preset inputs.
   const [manualSymbol, setManualSymbol] = useState<string>("auto");
   const [manualStake, setManualStake] = useState(1);
-  const [manualTakeProfit, setManualTakeProfit] = useState(0);
-  const [manualStopLoss, setManualStopLoss] = useState(0);
+  const [manualTakeProfit, setManualTakeProfit] = useState(100);
+  const [manualStopLoss, setManualStopLoss] = useState(30);
+  const [manualGrowthRate, setManualGrowthRate] = useState(3);
 
   const dragRef = useRef<{
     moved: boolean;
@@ -329,6 +335,7 @@ export function AiAssistant({
         martingale: botMartingale,
         takeProfit: botTakeProfit,
         stopLoss: botStopLoss,
+        maxRuns: botRuns,
       });
       toast.success(`${bot.name} deployed. Auto-running with your presets…`);
       setOpen(false);
@@ -370,6 +377,7 @@ export function AiAssistant({
       stake: manualStake,
       takeProfit: manualTakeProfit,
       stopLoss: manualStopLoss,
+      growthRate: manualGrowthRate,
       side,
       selectedDigit,
       autoRun: true,
@@ -397,20 +405,20 @@ export function AiAssistant({
     <>
       {open && (
         <aside
-          className="fixed z-50 overflow-hidden rounded-2xl border border-[#d7dce0] bg-white shadow-2xl dark:border-[#2a2f35] dark:bg-[#101214]"
+          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-[#d7dce0] bg-white shadow-2xl dark:border-[#2a2f35] dark:bg-[#101214]"
           style={panelStyle}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#e7eaee] px-4 py-3 dark:border-[#24282d]">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#e7eaee] px-4 py-3 dark:border-[#24282d]">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-bold">
-                <BrainCircuit className="size-4 text-[#4bb4b3]" />
+                <Bot className="size-4 text-[#4bb4b3]" />
                 <span className="truncate">AI Market Assistant</span>
               </div>
               <div className="truncate text-[11px] text-[#6b7280] dark:text-[#aab1b8]">
                 {lastAnalysisAt
-                  ? `Updated ${lastAnalysisAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}${tab === "best-bot" && topBot ? ` · ${topBot.marketLabel}` : tab === "manual" && topManual ? ` · ${topManual.marketLabel}` : ""}`
-                  : `Market: ${currentMarket}`}
+                  ? `Updated ${lastAnalysisAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · ${currentMarket}`
+                  : `Current market: ${currentMarket}`}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -448,7 +456,7 @@ export function AiAssistant({
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-2 overflow-x-auto border-b border-[#e7eaee] px-3 py-2 dark:border-[#24282d]">
+          <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[#e7eaee] px-3 py-2 dark:border-[#24282d]">
             {(["best-bot", "manual", "memory"] as AssistantTab[]).map((t) => (
               <button
                 key={t}
@@ -467,12 +475,11 @@ export function AiAssistant({
           </div>
 
           {/* Content */}
-          <div className="h-[calc(100%-7.25rem)] overflow-y-auto px-4 py-4 text-sm">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm">
             {tab === "best-bot" && (
               <BestBotView
                 hasRun={botHasRun}
                 loading={botLoading}
-                progress={botProgress}
                 error={botError}
                 opportunities={botOpportunities}
                 stakeRecommendation={stakeRecommendation}
@@ -480,7 +487,6 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 launchingPresetId={launchingPresetId}
                 onLaunch={handleLaunchBestBot}
-                onRun={() => void runBotAnalysis()}
                 presetStake={botStake}
                 onPresetStake={setBotStake}
                 presetTakeProfit={botTakeProfit}
@@ -489,6 +495,8 @@ export function AiAssistant({
                 onPresetStopLoss={setBotStopLoss}
                 presetMartingale={botMartingale}
                 onPresetMartingale={setBotMartingale}
+                presetRuns={botRuns}
+                onPresetRuns={setBotRuns}
                 onApplySuggestion={applyBotSuggestion}
               />
             )}
@@ -497,7 +505,6 @@ export function AiAssistant({
               <ManualTraderView
                 hasRun={manualHasRun}
                 loading={manualLoading}
-                progress={manualProgress}
                 error={manualError}
                 kind={manualKind}
                 suggestions={manualSuggestions}
@@ -505,7 +512,6 @@ export function AiAssistant({
                 currency={currency ?? "USD"}
                 onKindChange={handleManualKindChange}
                 onLaunch={handleLaunchManualTrader}
-                onRun={() => void runManualAnalysis()}
                 symbol={manualSymbol}
                 onSymbolChange={setManualSymbol}
                 presetStake={manualStake}
@@ -514,6 +520,8 @@ export function AiAssistant({
                 onPresetTakeProfit={setManualTakeProfit}
                 presetStopLoss={manualStopLoss}
                 onPresetStopLoss={setManualStopLoss}
+                presetGrowthRate={manualGrowthRate}
+                onPresetGrowthRate={setManualGrowthRate}
               />
             )}
 
@@ -527,6 +535,39 @@ export function AiAssistant({
               />
             )}
           </div>
+
+          {/* Sticky footer: AI Market Scan action */}
+          {tab !== "memory" && (
+            <div className="shrink-0 border-t border-[#e7eaee] bg-white p-3 dark:border-[#24282d] dark:bg-[#101214]">
+              <button
+                type="button"
+                onClick={() => {
+                  if (tab === "best-bot") void runBotAnalysis();
+                  else if (tab === "manual" && manualKind) void runManualAnalysis();
+                }}
+                disabled={
+                  botLoading ||
+                  manualLoading ||
+                  (tab === "manual" && !manualKind)
+                }
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#4bb4b3] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3aa09e] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {botLoading || manualLoading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Analyzing markets…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="size-4" />
+                    {tab === "manual" && !manualKind
+                      ? "Choose a contract first"
+                      : "Run AI Market Scan"}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </aside>
       )}
 
@@ -568,7 +609,6 @@ export function AiAssistant({
 function BestBotView({
   hasRun,
   loading,
-  progress,
   error,
   opportunities,
   stakeRecommendation,
@@ -576,7 +616,6 @@ function BestBotView({
   currency,
   launchingPresetId,
   onLaunch,
-  onRun,
   presetStake,
   onPresetStake,
   presetTakeProfit,
@@ -585,11 +624,12 @@ function BestBotView({
   onPresetStopLoss,
   presetMartingale,
   onPresetMartingale,
+  presetRuns,
+  onPresetRuns,
   onApplySuggestion,
 }: {
   hasRun: boolean;
   loading: boolean;
-  progress: AnalysisProgress | null;
   error: string | null;
   opportunities: BotOpportunity[];
   stakeRecommendation: StakeRecommendation | null;
@@ -597,7 +637,6 @@ function BestBotView({
   currency: string;
   launchingPresetId: string | null;
   onLaunch: (bot: BotOpportunity) => void;
-  onRun: () => void;
   presetStake: number;
   onPresetStake: (n: number) => void;
   presetTakeProfit: number;
@@ -606,27 +645,31 @@ function BestBotView({
   onPresetStopLoss: (n: number) => void;
   presetMartingale: number;
   onPresetMartingale: (n: number) => void;
+  presetRuns: number;
+  onPresetRuns: (n: number) => void;
   onApplySuggestion: () => void;
 }) {
   const topBot = opportunities[0] ?? null;
   const rest = opportunities.slice(1, 5);
 
-  const presets = (
+  const header = (
     <>
-      <PresetInputsGrid
+      <StepCard
+        title="Step 1 · Set your bot parameters"
+        description="Enter your stake, risk limits, martingale and number of runs. The AI scans for the best market + bot, applies these to the bot builder, and auto-runs it on launch."
+      />
+      <BotPresetForm
         currency={currency}
         stake={presetStake}
         onStake={onPresetStake}
+        martingale={presetMartingale}
+        onMartingale={onPresetMartingale}
         takeProfit={presetTakeProfit}
         onTakeProfit={onPresetTakeProfit}
         stopLoss={presetStopLoss}
         onStopLoss={onPresetStopLoss}
-        extra={{
-          label: "Martingale (×)",
-          value: presetMartingale,
-          onChange: onPresetMartingale,
-          step: 0.05,
-        }}
+        runs={presetRuns}
+        onRuns={onPresetRuns}
       />
       {stakeRecommendation && (
         <ApplySuggestionButton
@@ -640,23 +683,8 @@ function BestBotView({
   if (loading) {
     return (
       <div className="space-y-3">
-        {presets}
-        <ProgressCard progress={progress} />
-      </div>
-    );
-  }
-
-  if (!hasRun) {
-    return (
-      <div className="space-y-3">
-        {presets}
-        <IdlePrompt
-          title="Run the AI bot analysis"
-          description="The AI will pull 500 fresh ticks from every market, compute fair-value baselines, and rank bot presets by confidence-weighted edge. Takes about 10 seconds."
-          runLabel="Run AI analysis"
-          onRun={onRun}
-        />
-        <AccuracyDisclaimer />
+        {header}
+        <RunningCard description="Pulling the latest 500 ticks across every synthetic market for the recommendation." />
       </div>
     );
   }
@@ -664,22 +692,17 @@ function BestBotView({
   if (error) {
     return (
       <div className="space-y-3">
-        {presets}
+        {header}
         <ErrorCard message={error} />
-        <RerunButton onRerun={onRun} loading={loading} />
         <AccuracyDisclaimer />
       </div>
     );
   }
 
-  if (!topBot) {
+  if (!hasRun || !topBot) {
     return (
       <div className="space-y-3">
-        {presets}
-        <InfoCard title="No data yet">
-          Click Rerun to start the bot analysis.
-        </InfoCard>
-        <RerunButton onRerun={onRun} loading={loading} />
+        {header}
         <AccuracyDisclaimer />
       </div>
     );
@@ -687,7 +710,7 @@ function BestBotView({
 
   return (
     <div className="space-y-3">
-      {presets}
+      {header}
       {/* Top pick */}
       <div className="rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-3 dark:border-[#1f403f] dark:bg-[#102726]">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#4bb4b3]">
@@ -798,7 +821,6 @@ function BestBotView({
         </div>
       )}
 
-      <RerunButton onRerun={onRun} loading={loading} />
       <AccuracyDisclaimer />
     </div>
   );
@@ -809,7 +831,6 @@ function BestBotView({
 function ManualTraderView({
   hasRun,
   loading,
-  progress,
   error,
   kind,
   suggestions,
@@ -817,7 +838,6 @@ function ManualTraderView({
   currency,
   onKindChange,
   onLaunch,
-  onRun,
   symbol,
   onSymbolChange,
   presetStake,
@@ -826,10 +846,11 @@ function ManualTraderView({
   onPresetTakeProfit,
   presetStopLoss,
   onPresetStopLoss,
+  presetGrowthRate,
+  onPresetGrowthRate,
 }: {
   hasRun: boolean;
   loading: boolean;
-  progress: AnalysisProgress | null;
   error: string | null;
   kind: ManualContractKind | null;
   suggestions: ManualMarketSuggestion[];
@@ -837,7 +858,6 @@ function ManualTraderView({
   currency: string;
   onKindChange: (kind: ManualContractKind | null) => void;
   onLaunch: () => void;
-  onRun: () => void;
   symbol: string;
   onSymbolChange: (v: string) => void;
   presetStake: number;
@@ -846,6 +866,8 @@ function ManualTraderView({
   onPresetTakeProfit: (n: number) => void;
   presetStopLoss: number;
   onPresetStopLoss: (n: number) => void;
+  presetGrowthRate: number;
+  onPresetGrowthRate: (n: number) => void;
 }) {
   const topMarket = suggestions[0] ?? null;
   const rest = suggestions.slice(1, 7);
@@ -853,28 +875,28 @@ function ManualTraderView({
   if (!kind) {
     return (
       <div className="space-y-3">
-        <InfoCard title="Choose a contract family">
-          Select the type of contract you want to trade. The AI will scan all 10 synthetic digit
-          markets and recommend the strongest setup.
-        </InfoCard>
+        <StepCard
+          title="Step 1 · Choose your contract"
+          description="Pick the contract type you want the AI to trade. It scans every synthetic market, picks the strongest setup, applies your presets to the trade panel, and auto-places the trade on launch."
+        />
         <div className="grid grid-cols-2 gap-2">
-          {(["even_odd", "over_under", "matches_differs", "rise_fall"] as ManualContractKind[]).map(
-            (k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => onKindChange(k)}
-                className="rounded-xl border border-[#e7eaee] bg-[#f7f9fa] p-3 text-left transition hover:border-[#4bb4b3] hover:bg-[#eef9f8] dark:border-[#24282d] dark:bg-[#141719] dark:hover:border-[#4bb4b3] dark:hover:bg-[#102726]"
-              >
-                <div className="text-xs font-semibold text-[#172029] dark:text-[#f1f5f9]">
-                  {MANUAL_KIND_LABELS[k]}
-                </div>
-                <div className="mt-0.5 text-[10px] text-[#62707c] dark:text-[#aab1b8]">
-                  {MANUAL_KIND_DESC[k]}
-                </div>
-              </button>
-            ),
-          )}
+          {(
+            ["even_odd", "over_under", "matches_differs", "rise_fall", "accumulator"] as ManualContractKind[]
+          ).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => onKindChange(k)}
+              className="rounded-xl border border-[#e7eaee] bg-[#f7f9fa] p-3 text-left transition hover:border-[#4bb4b3] hover:bg-[#eef9f8] dark:border-[#24282d] dark:bg-[#141719] dark:hover:border-[#4bb4b3] dark:hover:bg-[#102726]"
+            >
+              <div className="text-xs font-semibold text-[#172029] dark:text-[#f1f5f9]">
+                {MANUAL_KIND_LABELS[k]}
+              </div>
+              <div className="mt-0.5 text-[10px] text-[#62707c] dark:text-[#aab1b8]">
+                {MANUAL_KIND_DESC[k]}
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     );
@@ -896,8 +918,12 @@ function ManualTraderView({
         </span>
       </div>
 
+      <StepCard
+        title="Step 2 · Set your trade presets"
+        description="These values are transferred to the manual trader inputs and the trade is placed automatically when you launch."
+      />
       <MarketPairSelect value={symbol} onChange={onSymbolChange} />
-      <PresetInputsGrid
+      <ManualPresetForm
         currency={currency}
         stake={presetStake}
         onStake={onPresetStake}
@@ -905,17 +931,13 @@ function ManualTraderView({
         onTakeProfit={onPresetTakeProfit}
         stopLoss={presetStopLoss}
         onStopLoss={onPresetStopLoss}
+        showGrowthRate={kind === "accumulator"}
+        growthRate={presetGrowthRate}
+        onGrowthRate={onPresetGrowthRate}
       />
 
-      {loading && <ProgressCard progress={progress} />}
-
-      {!loading && !hasRun && (
-        <IdlePrompt
-          title={`Run the AI analysis on ${MANUAL_KIND_LABELS[kind]}`}
-          description={`The AI will pull 500 fresh ticks from each of the 10 synthetic digit markets, score every threshold/digit by statistical confidence, and surface the strongest ${MANUAL_KIND_LABELS[kind]} signal. Takes about 10 seconds.`}
-          runLabel="Run AI analysis"
-          onRun={onRun}
-        />
+      {loading && (
+        <RunningCard description={`Pulling the latest 500 ticks across every synthetic market for the best ${MANUAL_KIND_LABELS[kind]} signal.`} />
       )}
 
       {!loading && hasRun && error && <ErrorCard message={error} />}
@@ -1018,11 +1040,10 @@ function ManualTraderView({
 
       {!loading && hasRun && !error && !topMarket && kind && (
         <InfoCard title="No results">
-          Click Rerun to scan the markets again.
+          Run the scan again to refresh the markets.
         </InfoCard>
       )}
 
-      {!loading && hasRun && <RerunButton onRerun={onRun} loading={loading} />}
       <AccuracyDisclaimer />
     </div>
   );
@@ -1116,35 +1137,102 @@ function MemoryView({
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function PresetField({
+function UnitInput({
   label,
   value,
   onChange,
+  unit,
   min,
   step,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
+  unit?: string;
   min?: number;
   step?: number;
 }) {
   return (
     <label className="block">
-      <span className="text-[10px] text-[#6b7280] dark:text-[#9ca3af]">{label}</span>
-      <input
-        type="number"
-        min={min}
-        step={step}
-        value={Number.isFinite(value) ? value : 0}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-0.5 h-8 w-full rounded-md border border-[#d7dce0] bg-white px-2 text-center font-mono text-sm text-[#172029] outline-none focus:border-[#4bb4b3] dark:border-[#2a2f35] dark:bg-[#101214] dark:text-[#f1f5f9]"
-      />
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8a939c] dark:text-[#8b949c]">
+        {label}
+      </span>
+      <div className="mt-1 flex items-center rounded-lg border border-[#dfe4e8] bg-white px-3 focus-within:border-[#4bb4b3] dark:border-[#2a2f35] dark:bg-[#0c0e10]">
+        <input
+          type="number"
+          min={min}
+          step={step}
+          value={Number.isFinite(value) ? value : 0}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="h-10 w-full min-w-0 bg-transparent text-sm font-semibold text-[#172029] outline-none dark:text-[#f1f5f9]"
+        />
+        {unit && (
+          <span className="ml-2 shrink-0 text-[11px] font-medium text-[#9aa3ab]">{unit}</span>
+        )}
+      </div>
     </label>
   );
 }
 
-function PresetInputsGrid({
+function StepCard({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-2xl border border-[#c6eeec] bg-[#eef9f8] p-4 dark:border-[#1f403f] dark:bg-[#102726]">
+      <div className="text-sm font-bold text-[#172029] dark:text-[#f1f5f9]">{title}</div>
+      <p className="mt-1 text-[13px] leading-5 text-[#3f6f6d] dark:text-[#9fc7c5]">{description}</p>
+    </div>
+  );
+}
+
+function RunningCard({ description }: { description: string }) {
+  return (
+    <div className="rounded-2xl border border-[#c6eeec] bg-[#eef9f8] p-4 dark:border-[#1f403f] dark:bg-[#102726]">
+      <div className="text-sm font-bold text-[#172029] dark:text-[#f1f5f9]">Running analysis</div>
+      <p className="mt-1 text-[13px] leading-5 text-[#3f6f6d] dark:text-[#9fc7c5]">{description}</p>
+    </div>
+  );
+}
+
+function BotPresetForm({
+  currency,
+  stake,
+  onStake,
+  martingale,
+  onMartingale,
+  takeProfit,
+  onTakeProfit,
+  stopLoss,
+  onStopLoss,
+  runs,
+  onRuns,
+}: {
+  currency: string;
+  stake: number;
+  onStake: (n: number) => void;
+  martingale: number;
+  onMartingale: (n: number) => void;
+  takeProfit: number;
+  onTakeProfit: (n: number) => void;
+  stopLoss: number;
+  onStopLoss: (n: number) => void;
+  runs: number;
+  onRuns: (n: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl bg-[#f7f9fa] p-3 dark:bg-[#141719]">
+      <div className="grid grid-cols-2 gap-3">
+        <UnitInput label="Stake" value={stake} onChange={onStake} unit={currency} min={0.35} step={0.01} />
+        <UnitInput label="Martingale" value={martingale} onChange={onMartingale} unit="×" min={1} step={0.05} />
+        <UnitInput label="Take profit" value={takeProfit} onChange={onTakeProfit} unit={currency} min={0} step={0.01} />
+        <UnitInput label="Stop loss" value={stopLoss} onChange={onStopLoss} unit={currency} min={0} step={0.01} />
+      </div>
+      <div className="mt-3">
+        <UnitInput label="Number of runs" value={runs} onChange={onRuns} min={1} step={1} />
+      </div>
+    </div>
+  );
+}
+
+function ManualPresetForm({
   currency,
   stake,
   onStake,
@@ -1152,7 +1240,9 @@ function PresetInputsGrid({
   onTakeProfit,
   stopLoss,
   onStopLoss,
-  extra,
+  showGrowthRate,
+  growthRate,
+  onGrowthRate,
 }: {
   currency: string;
   stake: number;
@@ -1161,44 +1251,29 @@ function PresetInputsGrid({
   onTakeProfit: (n: number) => void;
   stopLoss: number;
   onStopLoss: (n: number) => void;
-  extra?: { label: string; value: number; onChange: (n: number) => void; step?: number };
+  showGrowthRate: boolean;
+  growthRate: number;
+  onGrowthRate: (n: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-[#e7eaee] bg-[#f7f9fa] p-3 dark:border-[#24282d] dark:bg-[#141719]">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#64707c] dark:text-[#aab1b8]">
-        Your trade presets
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <PresetField label={`Stake (${currency})`} value={stake} onChange={onStake} min={0.35} step={0.01} />
-        {extra ? (
-          <PresetField
-            label={extra.label}
-            value={extra.value}
-            onChange={extra.onChange}
-            min={0}
-            step={extra.step ?? 0.05}
+    <div className="rounded-2xl bg-[#f7f9fa] p-3 dark:bg-[#141719]">
+      <div className="grid grid-cols-2 gap-3">
+        <UnitInput label="Stake" value={stake} onChange={onStake} unit={currency} min={0.35} step={0.01} />
+        {showGrowthRate ? (
+          <UnitInput
+            label="Growth rate"
+            value={growthRate}
+            onChange={onGrowthRate}
+            unit="%"
+            min={1}
+            step={1}
           />
         ) : (
           <div />
         )}
-        <PresetField
-          label={`Take profit (${currency})`}
-          value={takeProfit}
-          onChange={onTakeProfit}
-          min={0}
-          step={0.01}
-        />
-        <PresetField
-          label={`Stop loss (${currency})`}
-          value={stopLoss}
-          onChange={onStopLoss}
-          min={0}
-          step={0.01}
-        />
+        <UnitInput label="Take profit" value={takeProfit} onChange={onTakeProfit} unit={currency} min={0} step={0.01} />
+        <UnitInput label="Stop loss" value={stopLoss} onChange={onStopLoss} unit={currency} min={0} step={0.01} />
       </div>
-      <p className="mt-2 text-[10px] text-[#62707c] dark:text-[#aab1b8]">
-        Set these before you analyse. Launch deploys them into the trade panel and executes automatically.
-      </p>
     </div>
   );
 }
@@ -1234,80 +1309,6 @@ function ApplySuggestionButton({ label, onClick }: { label: string; onClick: () 
     >
       <Sparkles className="size-3.5" />
       {label}
-    </button>
-  );
-}
-
-function IdlePrompt({
-  title,
-  description,
-  runLabel,
-  onRun,
-}: {
-  title: string;
-  description: string;
-  runLabel: string;
-  onRun: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-5 text-center dark:border-[#1f403f] dark:bg-[#102726]">
-      <div className="rounded-full bg-white p-3 shadow-sm dark:bg-[#141719]">
-        <BrainCircuit className="size-6 text-[#4bb4b3]" />
-      </div>
-      <div className="space-y-1">
-        <div className="text-sm font-semibold text-[#172029] dark:text-[#f1f5f9]">{title}</div>
-        <p className="text-xs leading-5 text-[#42505b] dark:text-[#aab1b8]">{description}</p>
-      </div>
-      <button
-        type="button"
-        onClick={onRun}
-        className="flex items-center gap-2 rounded-xl bg-[#4bb4b3] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3aa09e]"
-      >
-        <Sparkles className="size-4" />
-        {runLabel}
-      </button>
-    </div>
-  );
-}
-
-function ProgressCard({ progress }: { progress: AnalysisProgress | null }) {
-  const pct = Math.round(Math.min(100, Math.max(0, (progress?.pct ?? 0) * 100)));
-  return (
-    <div className="space-y-3 rounded-xl border border-[#c6eeec] bg-[#eef9f8] p-4 dark:border-[#1f403f] dark:bg-[#102726]">
-      <div className="flex items-center gap-2">
-        <Loader2 className="size-4 shrink-0 animate-spin text-[#4bb4b3]" />
-        <span className="text-sm font-semibold text-[#0f766e] dark:text-[#7ee0df]">
-          AI analysis in progress
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        <div className="text-xs leading-5 text-[#42505b] dark:text-[#aab1b8]">
-          {progress?.stage ?? "Starting…"}
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#d8eceb] dark:bg-[#1a2b2b]">
-          <div
-            className="h-full rounded-full bg-[#4bb4b3] transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="text-right text-[10px] font-mono text-[#62707c] dark:text-[#aab1b8]">
-          {pct}%
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RerunButton({ onRerun, loading }: { onRerun: () => void; loading: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onRerun}
-      disabled={loading}
-      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#d7dce0] bg-white px-4 py-2 text-xs font-semibold text-[#42505b] transition hover:border-[#4bb4b3] hover:bg-[#eef9f8] hover:text-[#0f766e] disabled:opacity-50 dark:border-[#2a2f35] dark:bg-[#141719] dark:text-[#c9d0d7] dark:hover:border-[#4bb4b3] dark:hover:bg-[#102726] dark:hover:text-[#8be6e4]"
-    >
-      <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-      Rerun analysis
     </button>
   );
 }
@@ -1388,15 +1389,6 @@ function ErrorCard({ message }: { message: string }) {
     <div className="rounded-xl border border-[#ffd4d7] bg-[#fff4f5] p-3 text-sm text-[#a52a34] dark:border-[#4a2025] dark:bg-[#221316] dark:text-[#ff98a1]">
       <div className="font-semibold">Analysis failed</div>
       <div className="mt-1 leading-6">{message}</div>
-    </div>
-  );
-}
-
-function LoadingCard({ message }: { message: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-[#d8e7e6] bg-[#eef9f8] p-3 text-sm text-[#245a58] dark:border-[#1f403f] dark:bg-[#102726] dark:text-[#9ee5e3]">
-      <Loader2 className="size-4 shrink-0 animate-spin" />
-      <span>{message}</span>
     </div>
   );
 }

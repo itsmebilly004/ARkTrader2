@@ -86,8 +86,10 @@ export async function deployBotFromAiSuggestion({
   martingale,
   takeProfit = 0,
   stopLoss = 0,
+  maxRuns,
 }: {
   martingale: number;
+  maxRuns?: number;
   presetId: string;
   stake: number;
   stopLoss?: number;
@@ -110,6 +112,7 @@ export async function deployBotFromAiSuggestion({
   const overridden = normalizeBotBuilderSettings({
     ...baseSettings,
     martingale,
+    maxRuns: maxRuns && maxRuns > 0 ? Math.floor(maxRuns) : baseSettings.maxRuns,
     maxStake: Math.max(baseMaxStake, stake * Math.max(1, martingale) * 8),
     stake,
     stopLoss: Math.abs(stopLoss) || 0,

@@ -66,7 +66,10 @@
       "Bash(break)",
       "Bash(grep -iE \"src[/\\\\\\\\\\\\\\\\]\\(components|lib|hooks|context|routes\\)[/\\\\\\\\\\\\\\\\]\")",
       "Bash(rm -f tsconfig.check.json)",
-      "Bash(:)"
+      "Bash(:)",
+      "PowerShell($f = \"src\\\\components\\\\ai-assistant.tsx\"; \"Lines: \" + \\(Get-Content $f | Measure-Object -Line\\).Lines; \"--- git status ---\"; git status --short $f; \"--- git diff stat ---\"; git diff --stat $f)",
+      "PowerShell($f = \"src/components/ai-assistant.tsx\"; \"--- is tracked? ---\"; git ls-files $f; \"--- HEAD line count ---\"; git show \"HEAD:$f\" | Measure-Object -Line | Select-Object -ExpandProperty Lines; \"--- working tree vs HEAD diff lines ---\"; \\(git diff HEAD -- $f | Measure-Object -Line\\).Lines)",
+      "PowerShell($f = \"src/components/ai-assistant.tsx\"; \"--- raw git diff HEAD \\(first 30 lines\\) ---\"; git --no-pager diff HEAD -- $f 2>&1 | Select-Object -First 30)"
     ]
   }
 }

@@ -91,6 +91,8 @@ interface TradePanelProps {
   initialTakeProfit?: number;
   /** AI-suggested session stop-loss — applied as the lazy initial value. */
   initialStopLoss?: number;
+  /** AI-suggested accumulator growth rate as a fraction (e.g. 0.03 = 3%). */
+  initialGrowthRate?: number;
   /** AI-suggested prediction digit (over/under, matches/differs). */
   initialSelectedDigit?: number;
   /** AI-suggested purchase direction to auto-execute (even/odd/over/under/...). */
@@ -165,6 +167,7 @@ export function TradePanel({
   initialTradeType,
   initialTakeProfit,
   initialStopLoss,
+  initialGrowthRate,
   initialSelectedDigit,
   initialSide,
   autoRun = false,
@@ -922,6 +925,10 @@ export function TradePanel({
           market={market}
           onBarriers={onAccumulatorBarriers}
           onMarketChange={onMarketChange}
+          initialStake={initialStake}
+          initialGrowthRate={initialGrowthRate}
+          initialTakeProfit={initialTakeProfit}
+          autoRun={autoRun}
         />
       </div>
     );

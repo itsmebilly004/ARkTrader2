@@ -44,19 +44,37 @@ type Props = {
   market: string;
   onBarriers?: (barriers: BarrierUpdate) => void;
   onMarketChange?: (market: string) => void;
+  /** AI-suggested opening stake. */
+  initialStake?: number;
+  /** AI-suggested growth rate as a fraction (e.g. 0.03 = 3%). */
+  initialGrowthRate?: number;
+  /** AI-suggested take-profit amount (enables the take-profit toggle when > 0). */
+  initialTakeProfit?: number;
+  /** When true, automatically buys one accumulator once the account is ready. */
+  autoRun?: boolean;
 };
 
-export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketChange }: Props) {
+export function AccumulatorTradePanel({
+  lastPrice,
+  market,
+  onBarriers,
+  onMarketChange,
+  initialStake,
+  initialGrowthRate,
+  initialTakeProfit,
+  autoRun = false,
+}: Props) {
   const { user } = useAuth();
   const { account, balance: accountBalance, currency, refreshBalances } = useDerivBalanceContext();
   const token = account?.deriv_token ?? null;
   const tradeCurrency = currency || account?.currency || "";
   const selectedAccountIsDemo = account ? isDemoAccount(account) : false;
 
-  const [stake, setStake] = useState(10);
-  const [growthRate, setGrowthRate] = useState<number>(0.03);
-  const [takeProfitEnabled, setTakeProfitEnabled] = useState(false);
-  const [takeProfit, setTakeProfit] = useState<number>(0);
+  const [stake, setStake] = useState(() => initialStake ?? 10);
+  const [growthRate, setGrowthRate] = useState<number>(() => initialGrowthRate ?? 0.03);
+  const [takeProfitEnabled, setTakeProfitEnabled] = useState(() => (initialTakeProfit ?? 0) > 0);
+  const [takeProfit, setTakeProfit] = useState<number>(() => initialTakeProfit ?? 0);
+  const autoRunFiredRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<AccumulatorContractState>(EMPTY_ACCUMULATOR_CONTRACT);
   const unsubscribeRef = useRef<null | (() => Promise<void>)>(null);
@@ -72,6 +90,21 @@ export function AccumulatorTradePanel({ lastPrice, market, onBarriers, onMarketC
       void unsubscribeRef.current?.();
     };
   }, []);
+
+  // One-shot AI auto-execution: buy a single accumulator on arrival when the
+  // assistant handed off an autoRun pickup and the account is ready.
+  useEffect(() => {
+    if (!autoRun || autoRunFiredRef.current) return;
+    if (!account || !token) return;
+    if (state.status === "active" || state.status === "proposing") return;
+    autoRunFiredRef.current = true;
+    const timer = window.setTimeout(() => {
+      toast.info(`AI auto-trade: accumulator on ${market}.`);
+      void startAccumulator();
+    }, 900);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, account, token]);
 
   useEffect(() => {
     const nextConfigKey = `${market}:${growthRate.toFixed(2)}`;

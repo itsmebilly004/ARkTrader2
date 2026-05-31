@@ -47,7 +47,7 @@ function BotBuilderPage() {
   }
 
   return (
-    <TopShell showAssistantButton={false} showBotMonitor={false}>
+    <TopShell showBotMonitor={false}>
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <BotBuilder />
