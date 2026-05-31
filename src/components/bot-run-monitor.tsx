@@ -128,7 +128,7 @@ export function BotRunMonitorPanel({
       className={cn(
         "flex min-w-0 flex-col overflow-hidden border border-[#d8d8d8] bg-white text-[#333333] shadow-sm dark:border-[#2c2c2c] dark:bg-[#151515] dark:text-[#eeeeee]",
         mode === "footer"
-          ? "fixed inset-x-2 bottom-2 z-40 max-h-[min(540px,72dvh)] rounded-lg sm:left-auto sm:w-[390px]"
+          ? "fixed inset-x-2 bottom-2 z-40 h-[min(540px,80dvh)] rounded-lg sm:left-auto sm:w-[390px]"
           : "h-[72dvh] min-h-[420px] max-sm:fixed max-sm:inset-x-2 max-sm:bottom-2 max-sm:top-24 max-sm:z-50 max-sm:min-h-0 max-sm:rounded-lg lg:h-auto lg:min-h-0",
       )}
     >
@@ -185,7 +185,7 @@ export function BotRunMonitorPanel({
 
         <TabsContent
           value="summary"
-          className="m-0 min-h-0 flex-1 bg-white p-3 sm:p-4 dark:bg-[#151515]"
+          className="m-0 min-h-0 flex-1 overflow-y-auto bg-white p-3 sm:p-4 dark:bg-[#151515]"
         >
           {stats.runs === 0 ? (
             <div className="flex min-h-36 items-center justify-center bg-[#f1f2f3] px-4 text-center text-sm leading-5 text-[#444] sm:h-[228px] sm:px-8 dark:bg-[#202020] dark:text-[#d8d8d8]">
