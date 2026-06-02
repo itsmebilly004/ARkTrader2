@@ -50,6 +50,8 @@ type Props = {
   initialGrowthRate?: number;
   /** AI-suggested take-profit amount (enables the take-profit toggle when > 0). */
   initialTakeProfit?: number;
+  /** AI-suggested auto-sell tick count — sells once the contract survives this many ticks (0 = off). */
+  initialTicks?: number;
   /** When true, automatically buys one accumulator once the account is ready. */
   autoRun?: boolean;
 };
@@ -62,6 +64,7 @@ export function AccumulatorTradePanel({
   initialStake,
   initialGrowthRate,
   initialTakeProfit,
+  initialTicks,
   autoRun = false,
 }: Props) {
   const { user } = useAuth();
@@ -74,7 +77,9 @@ export function AccumulatorTradePanel({
   const [growthRate, setGrowthRate] = useState<number>(() => initialGrowthRate ?? 0.03);
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(() => (initialTakeProfit ?? 0) > 0);
   const [takeProfit, setTakeProfit] = useState<number>(() => initialTakeProfit ?? 0);
+  const [holdTicks, setHoldTicks] = useState<number>(() => Math.max(0, Math.round(initialTicks ?? 0)));
   const autoRunFiredRef = useRef(false);
+  const autoSoldRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<AccumulatorContractState>(EMPTY_ACCUMULATOR_CONTRACT);
   const unsubscribeRef = useRef<null | (() => Promise<void>)>(null);
@@ -105,6 +110,22 @@ export function AccumulatorTradePanel({
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRun, account, token]);
+
+  // Auto-sell once the contract survives the configured number of ticks. Mirrors
+  // the "sell by Tick Count" behaviour of the accumulator bot strategies.
+  useEffect(() => {
+    if (state.status !== "active") {
+      autoSoldRef.current = false;
+      return;
+    }
+    if (!(holdTicks > 0) || autoSoldRef.current) return;
+    if (!state.isValidToSell || state.sellPrice == null) return;
+    if (state.tickCount == null || state.tickCount < holdTicks) return;
+    autoSoldRef.current = true;
+    toast.info(`Auto-selling accumulator after ${holdTicks} ticks.`);
+    void handleSell();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status, state.isValidToSell, state.sellPrice, state.tickCount, holdTicks]);
 
   useEffect(() => {
     const nextConfigKey = `${market}:${growthRate.toFixed(2)}`;
@@ -543,6 +564,28 @@ export function AccumulatorTradePanel({
             placeholder={`Amount (${tradeCurrency})`}
           />
         )}
+      </div>
+
+      <div className="order-4 rounded-md border border-[#d6d9dc] bg-white p-3 shadow-sm max-sm:p-1.5 sm:order-none dark:border-[#2f3337] dark:bg-[#151515]">
+        <div className="flex items-center justify-between text-sm font-semibold text-[#1f2328] max-sm:text-[11px] dark:text-[#f2f2f2]">
+          <span className="flex items-center gap-2">
+            Sell after ticks
+            <Info className="h-3.5 w-3.5 text-[#777777] dark:text-[#a8b0b8]" />
+          </span>
+        </div>
+        <Input
+          type="number"
+          min={0}
+          step={1}
+          value={holdTicks}
+          disabled={state.status === "active"}
+          onChange={(event) => setHoldTicks(Math.max(0, Math.round(Number(event.target.value))))}
+          className="mt-2 h-10 rounded border-[#d6d9dc] text-center font-mono font-semibold max-sm:mt-1 max-sm:h-7 max-sm:text-[11px] dark:border-[#30343a] dark:bg-[#101010] dark:text-[#f2f2f2]"
+          placeholder="Ticks (0 = off)"
+        />
+        <p className="mt-1.5 text-[11px] text-[#6f767d] max-sm:hidden dark:text-[#a8b0b8]">
+          Closes automatically once the contract survives this many ticks. Set 0 to sell manually.
+        </p>
       </div>
 
       {state.error && (

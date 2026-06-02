@@ -76,7 +76,8 @@
       "PowerShell(Get-ChildItem -Path \"public\\\\bots\" -ErrorAction SilentlyContinue | Select-Object Name, Length; \"--- public root ---\"; Get-ChildItem -Path \"public\" -ErrorAction SilentlyContinue | Select-Object Name)",
       "PowerShell(\"CWD: $\\(Get-Location\\)\"; Get-ChildItem public\\\\bots -Force -ErrorAction Continue | Format-Table Name,Length -AutoSize)",
       "Bash(cat v.txt)",
-      "Bash(rm -f v.txt)"
+      "Bash(rm -f v.txt)",
+      "Bash(git stash *)"
     ]
   }
 }

@@ -93,6 +93,8 @@ interface TradePanelProps {
   initialStopLoss?: number;
   /** AI-suggested accumulator growth rate as a fraction (e.g. 0.03 = 3%). */
   initialGrowthRate?: number;
+  /** AI-suggested accumulator auto-sell tick count (0 = off). */
+  initialTicks?: number;
   /** AI-suggested prediction digit (over/under, matches/differs). */
   initialSelectedDigit?: number;
   /** AI-suggested purchase direction to auto-execute (even/odd/over/under/...). */
@@ -168,6 +170,7 @@ export function TradePanel({
   initialTakeProfit,
   initialStopLoss,
   initialGrowthRate,
+  initialTicks,
   initialSelectedDigit,
   initialSide,
   autoRun = false,
@@ -928,6 +931,7 @@ export function TradePanel({
           initialStake={initialStake}
           initialGrowthRate={initialGrowthRate}
           initialTakeProfit={initialTakeProfit}
+          initialTicks={initialTicks}
           autoRun={autoRun}
         />
       </div>

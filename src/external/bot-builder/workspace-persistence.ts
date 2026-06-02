@@ -565,6 +565,123 @@ export function extractSettingsFromXmlText(
   };
 }
 
+// ─── Deployment param stamping ────────────────────────────────────────────────
+// When a bot is deployed from the AI assistant (or trading-bots page) we must
+// write the user's chosen stake / risk values INTO the workspace XML, not just
+// into the derived settings store. Otherwise `persistWorkspaceSnapshot` re-reads
+// the original stake from the unchanged blocks and silently overwrites the
+// user's value, so the bot trades with the preset's stock stake instead.
+
+export type BotXmlTradeParams = {
+  growthRate?: number;
+  martingale?: number;
+  stake?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  ticks?: number;
+};
+
+const STAKE_VARIABLE_NAMES = ["initial stake", "initial amount", "stake", "amount"];
+const TAKE_PROFIT_VARIABLE_NAMES = ["take profit", "target profit", "expected profit", "profit"];
+const STOP_LOSS_VARIABLE_NAMES = ["stop loss", "stoploss"];
+const MARTINGALE_VARIABLE_NAMES = ["martingale", "martigale", "martigale factor"];
+const TICK_COUNT_VARIABLE_NAMES = ["tick count", "ticks"];
+
+function isLiteralNumberBlock(el: Element | null): el is Element {
+  const type = el?.getAttribute("type");
+  return type === "math_number" || type === "math_number_positive";
+}
+
+function formatXmlNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  // Trim to 4 decimals and drop trailing zeros so "1.5" stays "1.5".
+  return String(Number(value.toFixed(4)));
+}
+
+/** Set every literal-number `variables_set` whose variable name matches `names`. */
+function setLiteralVariableValue(doc: Document, names: string[], value: number): void {
+  const wanted = new Set(names.map(normalizeVariableName));
+  for (const block of xmlBlocks(doc)) {
+    if (block.getAttribute("type") !== "variables_set") continue;
+    if (!wanted.has(normalizeVariableName(xmlField(block, "VAR")))) continue;
+    // Only rewrite when the value is a direct numeric literal — leave
+    // arithmetic (Stake = Stake × factor) and reference assignments untouched.
+    const literal = childBlock(childElement(block, "value", "VALUE"));
+    if (!isLiteralNumberBlock(literal)) continue;
+    const numField = xmlFieldElement(literal, "NUM");
+    if (numField) numField.textContent = formatXmlNumber(value);
+  }
+}
+
+/** Set a literal AMOUNT on trade-option blocks whose stake is a bare number. */
+function setTradeOptionAmount(doc: Document, value: number): void {
+  for (const block of xmlBlocks(doc)) {
+    const type = block.getAttribute("type");
+    if (type !== "trade_definition_tradeoptions" && type !== "trade_definition_accumulator") {
+      continue;
+    }
+    const valueWrapper = childElement(block, "value", "AMOUNT");
+    if (!valueWrapper) continue;
+    // A non-shadow <block> means the stake is variable/procedure driven (handled
+    // by setLiteralVariableValue); the hidden shadow must not be touched.
+    const hasRealBlock = Array.from(valueWrapper.children).some(
+      (child) => child.tagName.toLowerCase() === "block",
+    );
+    if (hasRealBlock) continue;
+    const shadow = childBlock(valueWrapper);
+    if (!isLiteralNumberBlock(shadow)) continue;
+    const numField = xmlFieldElement(shadow, "NUM");
+    if (numField) numField.textContent = formatXmlNumber(value);
+  }
+}
+
+function setAccumulatorGrowthRate(doc: Document, growthRate: number): void {
+  for (const block of xmlBlocks(doc)) {
+    if (block.getAttribute("type") !== "trade_definition_accumulator") continue;
+    const field = xmlFieldElement(block, "GROWTHRATE_LIST");
+    if (field) field.textContent = formatXmlNumber(growthRate);
+  }
+}
+
+/**
+ * Return a copy of `xmlText` with the user's deployment parameters stamped into
+ * the matching Blockly blocks. Falls back to the original XML when parsing or
+ * serialisation isn't available (e.g. during SSR).
+ */
+export function applyDeploymentParamsToBotXml(
+  xmlText: string,
+  params: BotXmlTradeParams,
+): string {
+  if (typeof DOMParser === "undefined" || typeof XMLSerializer === "undefined") return xmlText;
+  const doc = parseBlocklyXml(xmlText);
+  if (!doc) return xmlText;
+  try {
+    if (typeof params.stake === "number" && params.stake > 0) {
+      setLiteralVariableValue(doc, STAKE_VARIABLE_NAMES, params.stake);
+      setTradeOptionAmount(doc, params.stake);
+    }
+    if (typeof params.takeProfit === "number" && params.takeProfit >= 0) {
+      setLiteralVariableValue(doc, TAKE_PROFIT_VARIABLE_NAMES, Math.max(0, params.takeProfit));
+    }
+    if (typeof params.stopLoss === "number" && params.stopLoss >= 0) {
+      setLiteralVariableValue(doc, STOP_LOSS_VARIABLE_NAMES, Math.abs(params.stopLoss));
+    }
+    if (typeof params.martingale === "number" && params.martingale > 0) {
+      setLiteralVariableValue(doc, MARTINGALE_VARIABLE_NAMES, params.martingale);
+    }
+    if (typeof params.ticks === "number" && params.ticks > 0) {
+      setLiteralVariableValue(doc, TICK_COUNT_VARIABLE_NAMES, Math.round(params.ticks));
+    }
+    if (typeof params.growthRate === "number" && params.growthRate > 0) {
+      setAccumulatorGrowthRate(doc, params.growthRate);
+    }
+    return new XMLSerializer().serializeToString(doc);
+  } catch (err) {
+    console.warn("[bot-builder] failed to apply deployment params to xml", err);
+    return xmlText;
+  }
+}
+
 export function persistWorkspaceSnapshot(
   userId: string | null | undefined,
   workspace: BlocklyWorkspaceLike | null | undefined,

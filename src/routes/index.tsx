@@ -275,6 +275,7 @@ function Index() {
                 initialTakeProfit={aiPickup?.takeProfit}
                 initialStopLoss={aiPickup?.stopLoss}
                 initialGrowthRate={aiPickup ? aiPickup.growthRate / 100 : undefined}
+                initialTicks={aiPickup?.ticks}
                 initialSelectedDigit={aiPickup?.selectedDigit}
                 initialSide={aiPickup?.side}
                 autoRun={aiPickup?.autoRun}
@@ -342,6 +343,7 @@ function Index() {
                 initialTakeProfit={aiPickup?.takeProfit}
                 initialStopLoss={aiPickup?.stopLoss}
                 initialGrowthRate={aiPickup ? aiPickup.growthRate / 100 : undefined}
+                initialTicks={aiPickup?.ticks}
                 initialSelectedDigit={aiPickup?.selectedDigit}
                 initialSide={aiPickup?.side}
                 autoRun={aiPickup?.autoRun}

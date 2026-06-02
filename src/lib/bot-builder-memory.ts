@@ -9,8 +9,10 @@ import {
 import { TRADING_BOT_ASSETS } from "@/lib/trading-bot-database";
 import { fetchBotXmlFromDatabase } from "@/lib/bot-xml-storage";
 import {
+  applyDeploymentParamsToBotXml,
   extractSettingsFromXmlText,
   writeSavedWorkspaceXml,
+  type BotXmlTradeParams,
 } from "@/external/bot-builder/workspace-persistence";
 import { writeRecentWorkspaceXml } from "@/external/bot-builder/recent-workspaces";
 
@@ -55,6 +57,7 @@ function isLegacyTradeFormat(xml: string): boolean {
 export async function importBotXmlIntoBuilderMemory(
   userId: string | null | undefined,
   input: BuilderMemoryImport,
+  tradeParams?: BotXmlTradeParams,
 ): Promise<void> {
   const freshXml = normalizeXml(input.xml);
   if (!isBlocklyXml(freshXml)) {
@@ -73,6 +76,13 @@ export async function importBotXmlIntoBuilderMemory(
     if (savedUserXml && !isLegacyTradeFormat(savedUserXml)) {
       workspaceXml = savedUserXml;
     }
+  }
+
+  // Stamp the caller's stake / risk values into whichever workspace XML will be
+  // loaded so the running bot uses exactly what the user entered, instead of the
+  // preset's stock stake that `persistWorkspaceSnapshot` would otherwise restore.
+  if (tradeParams) {
+    workspaceXml = applyDeploymentParamsToBotXml(workspaceXml, tradeParams);
   }
 
   if (input.presetId) {
@@ -119,7 +129,16 @@ export async function deployBotFromAiSuggestion({
 
   const xml = await fetchBotXmlFromDatabase(presetId);
 
-  await importBotXmlIntoBuilderMemory(userId, { name: asset.name, presetId, xml });
+  await importBotXmlIntoBuilderMemory(
+    userId,
+    { name: asset.name, presetId, xml },
+    {
+      stake,
+      martingale,
+      takeProfit: Math.max(0, takeProfit) || 0,
+      stopLoss: Math.abs(stopLoss) || 0,
+    },
+  );
 
   const baseSettings = extractSettingsFromXmlText(xml);
   if (!baseSettings) throw new Error("Could not parse bot XML settings.");

@@ -153,6 +153,7 @@ export function AiAssistant({
   const [manualTakeProfit, setManualTakeProfit] = useState(100);
   const [manualStopLoss, setManualStopLoss] = useState(30);
   const [manualGrowthRate, setManualGrowthRate] = useState(3);
+  const [manualTicks, setManualTicks] = useState(5);
 
   const dragRef = useRef<{
     moved: boolean;
@@ -378,6 +379,7 @@ export function AiAssistant({
       takeProfit: manualTakeProfit,
       stopLoss: manualStopLoss,
       growthRate: manualGrowthRate,
+      ticks: manualTicks,
       side,
       selectedDigit,
       autoRun: true,
@@ -522,6 +524,8 @@ export function AiAssistant({
                 onPresetStopLoss={setManualStopLoss}
                 presetGrowthRate={manualGrowthRate}
                 onPresetGrowthRate={setManualGrowthRate}
+                presetTicks={manualTicks}
+                onPresetTicks={setManualTicks}
               />
             )}
 
@@ -848,6 +852,8 @@ function ManualTraderView({
   onPresetStopLoss,
   presetGrowthRate,
   onPresetGrowthRate,
+  presetTicks,
+  onPresetTicks,
 }: {
   hasRun: boolean;
   loading: boolean;
@@ -868,6 +874,8 @@ function ManualTraderView({
   onPresetStopLoss: (n: number) => void;
   presetGrowthRate: number;
   onPresetGrowthRate: (n: number) => void;
+  presetTicks: number;
+  onPresetTicks: (n: number) => void;
 }) {
   const topMarket = suggestions[0] ?? null;
   const rest = suggestions.slice(1, 7);
@@ -934,6 +942,8 @@ function ManualTraderView({
         showGrowthRate={kind === "accumulator"}
         growthRate={presetGrowthRate}
         onGrowthRate={onPresetGrowthRate}
+        ticks={presetTicks}
+        onTicks={onPresetTicks}
       />
 
       {loading && (
@@ -1243,6 +1253,8 @@ function ManualPresetForm({
   showGrowthRate,
   growthRate,
   onGrowthRate,
+  ticks,
+  onTicks,
 }: {
   currency: string;
   stake: number;
@@ -1254,6 +1266,8 @@ function ManualPresetForm({
   showGrowthRate: boolean;
   growthRate: number;
   onGrowthRate: (n: number) => void;
+  ticks: number;
+  onTicks: (n: number) => void;
 }) {
   return (
     <div className="rounded-2xl bg-[#f7f9fa] p-3 dark:bg-[#141719]">
@@ -1274,6 +1288,22 @@ function ManualPresetForm({
         <UnitInput label="Take profit" value={takeProfit} onChange={onTakeProfit} unit={currency} min={0} step={0.01} />
         <UnitInput label="Stop loss" value={stopLoss} onChange={onStopLoss} unit={currency} min={0} step={0.01} />
       </div>
+      {showGrowthRate && (
+        <div className="mt-3">
+          <UnitInput
+            label="Ticks (auto-sell)"
+            value={ticks}
+            onChange={onTicks}
+            unit="ticks"
+            min={0}
+            step={1}
+          />
+          <p className="mt-1.5 text-[11px] text-[#62707c] dark:text-[#aab1b8]">
+            The accumulator is sold automatically once it survives this many ticks. Set to 0 to
+            disable and close it manually.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

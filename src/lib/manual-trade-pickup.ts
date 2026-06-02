@@ -17,6 +17,8 @@ export type ManualTradePickup = {
   martingale: number;
   /** Accumulator growth rate percent (e.g. 3 = 3%). Only used for accumulator. */
   growthRate: number;
+  /** Accumulator: auto-sell once the contract survives this many ticks (0 = off). */
+  ticks: number;
   /** Purchase direction the AI recommended (even/odd/over/under/matches/differs/up/down/buy). */
   side: string;
   /** Prediction digit for over_under / matches_differs. */
@@ -31,6 +33,7 @@ const DEFAULTS: Omit<ManualTradePickup, "symbol" | "tradeType"> = {
   stopLoss: 0,
   martingale: 1,
   growthRate: 3,
+  ticks: 5,
   side: "buy",
   selectedDigit: 5,
   autoRun: false,
@@ -69,6 +72,7 @@ export function consumeManualTradePickup(): ManualTradePickup | null {
       stopLoss: numberOr(parsed.stopLoss, DEFAULTS.stopLoss),
       martingale: numberOr(parsed.martingale, DEFAULTS.martingale),
       growthRate: numberOr(parsed.growthRate, DEFAULTS.growthRate),
+      ticks: numberOr(parsed.ticks, DEFAULTS.ticks),
       side: typeof parsed.side === "string" && parsed.side ? parsed.side : DEFAULTS.side,
       selectedDigit: numberOr(parsed.selectedDigit, DEFAULTS.selectedDigit),
       autoRun: parsed.autoRun === true,
