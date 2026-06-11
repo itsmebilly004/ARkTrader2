@@ -7,7 +7,9 @@ type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 
 function env(...names: string[]) {
   for (const name of names) {
-    const value = process.env[name];
+    const value = String(process.env[name] ?? "")
+      .trim()
+      .replace(/^["']|["']$/g, "");
     if (value) return value;
   }
   return "";
@@ -85,10 +87,10 @@ export const Route = createFileRoute("/api/deriv-accounts")({
 
         const supabaseUrl = env("SUPABASE_URL", "VITE_SUPABASE_URL");
         const publishableKey = env(
-          "SUPABASE_PUBLISHABLE_KEY",
-          "VITE_SUPABASE_PUBLISHABLE_KEY",
           "SUPABASE_ANON_KEY",
           "VITE_SUPABASE_ANON_KEY",
+          "SUPABASE_PUBLISHABLE_KEY",
+          "VITE_SUPABASE_PUBLISHABLE_KEY",
         );
         const serviceRoleKey = env(
           "SUPABASE_SERVICE_ROLE_KEY",

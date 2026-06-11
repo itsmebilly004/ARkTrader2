@@ -12,11 +12,21 @@ type SupabaseAuthContext = {
   claims: User | null;
 };
 
+function cleanEnv(value: string | undefined) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
 export const requireSupabaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
-    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const SUPABASE_URL =
+      cleanEnv(process.env.SUPABASE_URL) || cleanEnv(process.env.VITE_SUPABASE_URL);
     const SUPABASE_KEY =
-      process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      cleanEnv(process.env.SUPABASE_ANON_KEY) ||
+      cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) ||
+      cleanEnv(process.env.SUPABASE_PUBLISHABLE_KEY) ||
+      cleanEnv(process.env.VITE_SUPABASE_PUBLISHABLE_KEY);
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       console.error("[Supabase Middleware] URL or Key missing in Vercel.");

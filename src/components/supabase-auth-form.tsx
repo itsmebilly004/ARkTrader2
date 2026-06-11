@@ -24,6 +24,15 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+function authErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Authentication failed.";
+  const status = (error as { status?: unknown })?.status;
+  if (status === 401 && /api key|jwt|unauthorized/i.test(message)) {
+    return "Supabase auth rejected the deployed API key. Check VITE_SUPABASE_ANON_KEY or VITE_SUPABASE_PUBLISHABLE_KEY in Vercel.";
+  }
+  return message;
+}
+
 interface SupabaseAuthFormProps {
   defaultMode?: "signin" | "signup";
   onSuccess?: () => void;
@@ -91,7 +100,7 @@ export function SupabaseAuthForm({ defaultMode = "signin", onSuccess }: Supabase
         onSuccess?.();
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Authentication failed.");
+      toast.error(authErrorMessage(err));
     } finally {
       setBusy(false);
     }
