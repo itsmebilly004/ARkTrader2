@@ -8,7 +8,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { ensureUserProvisioned } from "@/lib/account-provisioning";
 import { useAuth } from "@/hooks/use-auth";
 import type { DerivTokenSource, TradingAdapter } from "@/lib/deriv";
-import type { DerivAccountPlacement, DerivAccountType } from "@/lib/deriv-account";
+import {
+  booleanFrom,
+  normalizeDerivAccount,
+  stringFrom,
+  type DerivAccountPlacement,
+  type DerivAccountType,
+} from "@/lib/deriv-account";
 
 export type DerivAccount = {
   id?: string;
@@ -47,34 +53,46 @@ export type LiveBalance = {
   switchAccount: (accountId: string) => void;
 };
 
-type DbAccount = {
-  id: string;
-  user_id: string;
-  loginid: string;
-  account_type: string;
-  currency: string;
-  balance: number;
-  is_demo: boolean;
-  is_virtual: boolean;
+type DbAccount = Record<string, unknown> & {
+  id?: string;
+  user_id?: string;
+  loginid?: string;
+  account_id?: string;
+  account_type?: string;
+  currency?: string;
+  balance?: number | string | null;
+  is_demo?: boolean | string | number | null;
+  is_virtual?: boolean | string | number | null;
 };
 
-function dbToDerivAccount(row: DbAccount): DerivAccount {
-  const isDemo = row.is_demo;
+function dbToDerivAccount(row: DbAccount): DerivAccount | null {
+  const loginid = stringFrom(row.loginid, row.account_id, row.id);
+  if (!loginid) return null;
+  const normalized =
+    normalizeDerivAccount({
+      ...row,
+      account_id: loginid,
+      loginid,
+    }) ?? null;
+  const isDemo = normalized
+    ? normalized.is_demo
+    : (booleanFrom(row.is_demo) ?? String(row.account_type ?? "").toLowerCase() === "demo");
+
   return {
-    id: row.id,
-    account_id: row.loginid,
-    loginid: row.loginid,
+    id: stringFrom(row.id) || undefined,
+    account_id: loginid,
+    loginid,
     type: isDemo ? "demo" : "real",
     normalizedType: isDemo ? "demo" : "real",
-    label: isDemo ? "Demo Account" : "Real Account",
-    currency: row.currency,
-    balance: row.balance,
+    label: normalized?.label ?? (isDemo ? "Demo Account" : "Real Account"),
+    currency: normalized?.currency ?? stringFrom(row.currency, "USD"),
+    balance: Number(row.balance ?? 0),
     deriv_token: "sim_token",
     is_demo: isDemo,
-    is_virtual: row.is_virtual,
-    account_type: row.account_type,
-    classification_reason: "loginid-prefix",
-    detected_prefix: isDemo ? "DOT" : "ROT",
+    is_virtual: booleanFrom(row.is_virtual) ?? isDemo,
+    account_type: stringFrom(row.account_type, isDemo ? "demo" : "real"),
+    classification_reason: normalized?.classification_reason ?? "database-account-row",
+    detected_prefix: normalized?.detected_prefix ?? (isDemo ? "DOT" : "ROT"),
     final_tab_placement: isDemo ? "demoAccounts" : "realAccounts",
     token_source: "oauth_access_token",
     trading_authorized: true,
@@ -87,7 +105,7 @@ function dbToDerivAccount(row: DbAccount): DerivAccount {
 const SELECTED_KEY = (userId: string) => `selected_account:${userId}`;
 
 export function useDerivBalance(): LiveBalance {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,18 +113,26 @@ export function useDerivBalance(): LiveBalance {
   const seededRef = useRef(false);
 
   const loadAccounts = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from("accounts")
-      .select("*")
-      .eq("user_id", userId)
-      .order("is_demo");
-    if (error || !data) return;
-    const mapped = data.map((r) => dbToDerivAccount(r as DbAccount));
+    const { data, error } = await supabase.from("accounts").select("*").eq("user_id", userId);
+    if (error) {
+      console.error("[Balances] Could not load accounts from database", error);
+      setAccounts([]);
+      return [];
+    }
+    const mapped = (data ?? [])
+      .map((row) => dbToDerivAccount(row as DbAccount))
+      .filter((account): account is DerivAccount => Boolean(account))
+      .sort((a, b) => Number(a.is_demo) - Number(b.is_demo));
     setAccounts(mapped);
     return mapped;
   }, []);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
     if (!user) {
       setAccounts([]);
       setLoading(false);
@@ -152,7 +178,7 @@ export function useDerivBalance(): LiveBalance {
       cancelled = true;
       void supabase.removeChannel(channel);
     };
-  }, [user, loadAccounts]);
+  }, [authLoading, user, loadAccounts]);
 
   const refreshBalances = useCallback(
     async (_reason?: string, selectedAccountId?: string) => {
