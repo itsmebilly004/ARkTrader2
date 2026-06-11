@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/brand-logo";
 import { SupabaseAuthForm } from "@/components/supabase-auth-form";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 
 const search = z.object({
   mode: z.enum(["signin", "signup"]).catch("signin"),
@@ -16,7 +16,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const { mode } = Route.useSearch();
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuthContext();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,10 +29,7 @@ function AuthPage() {
         <BrandLogo className="h-10 w-auto" />
         <p className="text-sm text-muted-foreground">ArkTrader Hub</p>
       </div>
-      <SupabaseAuthForm
-        defaultMode={mode}
-        onSuccess={() => navigate({ to: "/dashboard" })}
-      />
+      <SupabaseAuthForm defaultMode={mode} onSuccess={() => navigate({ to: "/dashboard" })} />
     </div>
   );
 }

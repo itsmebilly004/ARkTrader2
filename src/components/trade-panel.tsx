@@ -21,7 +21,7 @@ import {
   TickDurationSelector,
   TradeTypeCard,
 } from "@/components/trade-option-components";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { updateTrackedTrade, upsertTrackedTrade } from "@/lib/activity-memory";
 import { isDemoAccount } from "@/lib/deriv-account";
@@ -180,7 +180,7 @@ export function TradePanel({
   showMarketSelector = true,
   stickyActions = false,
 }: TradePanelProps) {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { account, balance: accountBalance, currency, refreshBalances } = useDerivBalanceContext();
   const token = account?.deriv_token ?? null;
   const tradeCurrency = currency || account?.currency || "";
@@ -621,12 +621,7 @@ export function TradePanel({
       closedAt: new Date().toISOString(),
       payout: nextState.payout ?? null,
       profitLoss: profit,
-      status:
-        nextState.status === "won"
-          ? "won"
-          : nextState.status === "lost"
-            ? "lost"
-            : "sold",
+      status: nextState.status === "won" ? "won" : nextState.status === "lost" ? "lost" : "sold",
     });
     const { error } = await supabase
       .from("trades")
@@ -790,8 +785,7 @@ export function TradePanel({
             const profit = Number(next.currentProfit ?? 0);
             const tp = Math.abs(Number(takeProfit) || 0);
             const sl = Math.abs(Number(stopLoss) || 0);
-            const shouldAutoSell =
-              (tp > 0 && profit >= tp) || (sl > 0 && profit <= -sl);
+            const shouldAutoSell = (tp > 0 && profit >= tp) || (sl > 0 && profit <= -sl);
             if (shouldAutoSell && !autoSellInFlightRef.current) {
               autoSellInFlightRef.current = true;
               toast.info(

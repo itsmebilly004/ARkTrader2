@@ -18,21 +18,24 @@ function loginidsFor(userId: string): { real: string; demo: string } {
   };
 }
 
-export async function ensureUserProvisioned(
-  userId: string,
-  email: string | null,
-): Promise<void> {
+export async function ensureUserProvisioned(userId: string, email: string | null): Promise<void> {
   // Profile row
-  await supabase
+  const { error: profileError } = await supabase
     .from("users")
     .upsert({ id: userId, email: email ?? null }, { onConflict: "id" });
+  if (profileError) {
+    console.error("[Provisioning] Could not upsert user profile", profileError);
+  }
 
   // Starter accounts
   const { data: existing, error } = await supabase
     .from("accounts")
     .select("id, is_demo")
     .eq("user_id", userId);
-  if (error) return;
+  if (error) {
+    console.error("[Provisioning] Could not inspect account rows", error);
+    return;
+  }
 
   const hasReal = existing?.some((a) => a.is_demo === false) ?? false;
   const hasDemo = existing?.some((a) => a.is_demo === true) ?? false;
@@ -73,7 +76,10 @@ export async function ensureUserProvisioned(
   }
   if (rows.length === 0) return;
 
-  await supabase
+  const { error: accountError } = await supabase
     .from("accounts")
     .upsert(rows, { onConflict: "user_id,loginid", ignoreDuplicates: true });
+  if (accountError) {
+    console.error("[Provisioning] Could not create account rows", accountError);
+  }
 }

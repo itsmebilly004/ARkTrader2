@@ -5,7 +5,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureUserProvisioned } from "@/lib/account-provisioning";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,11 +29,8 @@ interface SupabaseAuthFormProps {
   onSuccess?: () => void;
 }
 
-export function SupabaseAuthForm({
-  defaultMode = "signin",
-  onSuccess,
-}: SupabaseAuthFormProps) {
-  const { user, loading: authLoading } = useAuth();
+export function SupabaseAuthForm({ defaultMode = "signin", onSuccess }: SupabaseAuthFormProps) {
+  const { user, loading: authLoading } = useAuthContext();
   const [mode, setMode] = useState<"signin" | "signup">(defaultMode);
   const [busy, setBusy] = useState(false);
 
@@ -65,25 +62,19 @@ export function SupabaseAuthForm({
 
         // Fallback: try to sign in immediately (works when confirm-email is off
         // but the signUp response somehow didn't include a session).
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email: values.email,
-            password: values.password,
-          });
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password,
+        });
         if (!signInError && signInData.session && signInData.user) {
-          await ensureUserProvisioned(
-            signInData.user.id,
-            signInData.user.email ?? values.email,
-          );
+          await ensureUserProvisioned(signInData.user.id, signInData.user.email ?? values.email);
           toast.success("Account created. Welcome to ArkTrader Hub!");
           form.reset();
           onSuccess?.();
           return;
         }
 
-        toast.success(
-          "Account created. Check your email to confirm before signing in.",
-        );
+        toast.success("Account created. Check your email to confirm before signing in.");
         form.reset();
         setMode("signin");
       } else {

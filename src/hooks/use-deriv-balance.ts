@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureUserProvisioned } from "@/lib/account-provisioning";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import type { DerivTokenSource, TradingAdapter } from "@/lib/deriv";
 import {
   booleanFrom,
@@ -105,7 +105,7 @@ function dbToDerivAccount(row: DbAccount): DerivAccount | null {
 const SELECTED_KEY = (userId: string) => `selected_account:${userId}`;
 
 export function useDerivBalance(): LiveBalance {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuthContext();
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,13 +127,30 @@ export function useDerivBalance(): LiveBalance {
     return mapped;
   }, []);
 
+  const loadProvisionedAccounts = useCallback(
+    async (userId: string, email: string | null) => {
+      let mapped = await loadAccounts(userId);
+      if (mapped && mapped.length > 0) return mapped;
+
+      await ensureUserProvisioned(userId, email);
+      mapped = await loadAccounts(userId);
+      if (!mapped || mapped.length === 0) {
+        console.warn("[Balances] No account rows are visible for the signed-in user", {
+          userId,
+        });
+      }
+      return mapped;
+    },
+    [loadAccounts],
+  );
+
   useEffect(() => {
     if (authLoading) {
       setLoading(true);
       return;
     }
 
-    if (!user) {
+    if (!user || !session) {
       setAccounts([]);
       setLoading(false);
       seededRef.current = false;
@@ -142,12 +159,11 @@ export function useDerivBalance(): LiveBalance {
     let cancelled = false;
 
     const init = async () => {
-      if (!seededRef.current) {
-        seededRef.current = true;
-        await ensureUserProvisioned(user.id, user.email ?? null);
-      }
       if (cancelled) return;
-      const mapped = await loadAccounts(user.id);
+      const mapped = seededRef.current
+        ? await loadAccounts(user.id)
+        : await loadProvisionedAccounts(user.id, user.email ?? null);
+      seededRef.current = true;
       if (cancelled) return;
       setLoading(false);
 
@@ -178,13 +194,13 @@ export function useDerivBalance(): LiveBalance {
       cancelled = true;
       void supabase.removeChannel(channel);
     };
-  }, [authLoading, user, loadAccounts]);
+  }, [authLoading, session, user, loadAccounts, loadProvisionedAccounts]);
 
   const refreshBalances = useCallback(
     async (_reason?: string, selectedAccountId?: string) => {
       if (!user) return;
       setRefreshing(true);
-      const mapped = await loadAccounts(user.id);
+      const mapped = await loadProvisionedAccounts(user.id, user.email ?? null);
       if (
         selectedAccountId &&
         mapped?.some((account) => account.account_id === selectedAccountId)
@@ -194,7 +210,7 @@ export function useDerivBalance(): LiveBalance {
       }
       setRefreshing(false);
     },
-    [user, loadAccounts],
+    [user, loadProvisionedAccounts],
   );
 
   const switchAccount = useCallback(

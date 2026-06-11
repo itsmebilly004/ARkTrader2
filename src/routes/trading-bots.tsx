@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { TopShell, PageHero } from "@/components/top-shell";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { recordBotPresetActivity } from "@/lib/activity-memory";
 import { importBotXmlIntoBuilderMemory } from "@/lib/bot-builder-memory";
 import { ensureBotXmlPresets, fetchBotXmlFromDatabase } from "@/lib/bot-xml-storage";
@@ -39,7 +39,7 @@ export const BOT_PRESETS = TRADING_BOT_ASSETS.map((preset) => ({
 }));
 
 function TradingBots() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const navigate = useNavigate();
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [deployingId, setDeployingId] = useState<string | null>(null);

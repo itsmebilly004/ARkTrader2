@@ -10,7 +10,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { TopShell } from "@/components/top-shell";
 import { isDemoAccount } from "@/lib/deriv-account";
@@ -28,7 +28,7 @@ const items = [
 ];
 
 function DashboardLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuthContext();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { account } = useDerivBalanceContext();

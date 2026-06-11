@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { DerivChart } from "@/components/deriv-chart";
 import { TopShell } from "@/components/top-shell";
 import { TradePanel } from "@/components/trade-panel";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-memory";
 import {
   DERIV_OAUTH_DASHBOARD_FAILURE_MESSAGE,
@@ -23,7 +23,8 @@ export const Route = createFileRoute("/")({
       { title: "ArkTrader Hub - Real-time Trading Platform" },
       {
         name: "description",
-        content: "Trade synthetic indices in real time with live charts, bots, analytics, and copy trading.",
+        content:
+          "Trade synthetic indices in real time with live charts, bots, analytics, and copy trading.",
       },
     ],
   }),
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const navigate = useNavigate();
   // Consume AI-assistant pickup once on mount (clears sessionStorage so a refresh starts clean).
   const [aiPickup] = useState<ManualTradePickup | null>(() => consumeManualTradePickup());
@@ -107,7 +108,9 @@ function Index() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
-    } catch { /* user dismissed */ }
+    } catch {
+      /* user dismissed */
+    }
   }, []);
 
   const handleMarketChange = useCallback(
@@ -177,7 +180,11 @@ function Index() {
         profitStatus: suppressLostOverlay ? null : nextStatus,
       }));
 
-      if (nextStatus === "lost" && !lossOverlayDismissedRef.current && lossOverlayTimerRef.current === null) {
+      if (
+        nextStatus === "lost" &&
+        !lossOverlayDismissedRef.current &&
+        lossOverlayTimerRef.current === null
+      ) {
         lossOverlayTimerRef.current = window.setTimeout(() => {
           lossOverlayTimerRef.current = null;
           lossOverlayDismissedRef.current = true;
@@ -310,11 +317,16 @@ function Index() {
 
       {/* ── Mobile layout: Deriv-style, price header + scrollable params + sticky buy/sell ── */}
       {isMobile && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{ height: "calc(100dvh - 11rem)" }}>
+        <div
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          style={{ height: "calc(100dvh - 11rem)" }}
+        >
           {/* Sticky price header */}
           <div className="flex shrink-0 items-center justify-between border-b border-[#e5e5e5] bg-white px-3 py-2 dark:border-[#242424] dark:bg-[#151515]">
             <div>
-              <div className="text-xs font-medium text-[#646464] dark:text-[#999999]">Manual Trader</div>
+              <div className="text-xs font-medium text-[#646464] dark:text-[#999999]">
+                Manual Trader
+              </div>
               <div className="font-mono text-xl font-bold tabular-nums text-[#1f2328] dark:text-[#f2f2f2]">
                 {price !== null ? price.toFixed(2) : "—"}
               </div>

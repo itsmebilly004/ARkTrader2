@@ -3,7 +3,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { AiAssistant } from "@/components/ai-assistant";
 import { BotRunMonitorPanel } from "@/components/bot-run-monitor";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { useBotRunner } from "@/context/bot-runner-context";
 import { useTheme } from "@/hooks/use-theme";
@@ -105,7 +105,7 @@ export function TopShell({
   showAssistantButton?: boolean;
   showBotMonitor?: boolean;
 }) {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const {

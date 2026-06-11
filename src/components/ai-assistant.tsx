@@ -9,17 +9,8 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { SYNTHETIC_MARKETS, type TradeCategory } from "@/lib/deriv";
-import {
-  AlertTriangle,
-  Bot,
-  Loader2,
-  RefreshCw,
-  Rocket,
-  Sparkles,
-  X,
-  Zap,
-} from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
+import { AlertTriangle, Bot, Loader2, RefreshCw, Rocket, Sparkles, X, Zap } from "lucide-react";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import {
   persistAssistantButtonPosition,
@@ -51,8 +42,16 @@ import { cn } from "@/lib/utils";
 
 // The 10 synthetic digit markets the AI scans / can trade.
 const MANUAL_MARKET_SYMBOLS = [
-  "R_10", "1HZ10V", "R_25", "1HZ25V", "R_50",
-  "1HZ50V", "R_75", "1HZ75V", "R_100", "1HZ100V",
+  "R_10",
+  "1HZ10V",
+  "R_25",
+  "1HZ25V",
+  "R_50",
+  "1HZ50V",
+  "R_75",
+  "1HZ75V",
+  "R_100",
+  "1HZ100V",
 ] as const;
 
 function marketLabel(symbol: string): string {
@@ -68,7 +67,8 @@ function parseSuggestionSide(
   const lower = sideLabel.toLowerCase();
   const digitMatch = sideLabel.match(/(\d)/);
   const digit = digitMatch ? Number(digitMatch[1]) : 5;
-  if (kind === "even_odd") return { selectedDigit: 5, side: lower.startsWith("odd") ? "odd" : "even" };
+  if (kind === "even_odd")
+    return { selectedDigit: 5, side: lower.startsWith("odd") ? "odd" : "even" };
   if (kind === "over_under")
     return { selectedDigit: digit, side: lower.startsWith("under") ? "under" : "over" };
   if (kind === "matches_differs")
@@ -111,7 +111,7 @@ export function AiAssistant({
   currentPath: string;
   showBotMonitor: boolean;
 }) {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { balance: rawBalance, currency } = useDerivBalanceContext();
   const { startBot, status: botRunnerStatus } = useBotRunner();
   const navigate = useNavigate();
@@ -164,11 +164,15 @@ export function AiAssistant({
     startY: number;
   } | null>(null);
 
-  const buttonSize = viewport.width < 640 ? ASSISTANT_BUTTON_SIZE_MOBILE : ASSISTANT_BUTTON_SIZE_DESKTOP;
+  const buttonSize =
+    viewport.width < 640 ? ASSISTANT_BUTTON_SIZE_MOBILE : ASSISTANT_BUTTON_SIZE_DESKTOP;
   const activeScope = scopeFromPath(currentPath);
   const currentMarket =
-    readRememberedMarket(user?.id, activeScope, readRememberedMarket(user?.id, "manual", "1HZ100V") ?? "1HZ100V") ??
-    "1HZ100V";
+    readRememberedMarket(
+      user?.id,
+      activeScope,
+      readRememberedMarket(user?.id, "manual", "1HZ100V") ?? "1HZ100V",
+    ) ?? "1HZ100V";
 
   // Memory view
   const memorySnapshot = useMemo(() => readActivityMemory(user?.id), [open, user?.id]);
@@ -210,7 +214,8 @@ export function AiAssistant({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = readAssistantButtonPosition(user?.id) ?? defaultButtonPosition(viewport, showBotMonitor);
+    const stored =
+      readAssistantButtonPosition(user?.id) ?? defaultButtonPosition(viewport, showBotMonitor);
     setPosition(clampPosition(stored, viewport, buttonSize));
   }, [buttonSize, showBotMonitor, user?.id, viewport]);
 
@@ -306,7 +311,9 @@ export function AiAssistant({
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
-    setPosition(clampPosition({ x: drag.originX + dx, y: drag.originY + dy }, viewport, buttonSize));
+    setPosition(
+      clampPosition({ x: drag.originX + dx, y: drag.originY + dy }, viewport, buttonSize),
+    );
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -549,11 +556,7 @@ export function AiAssistant({
                   if (tab === "best-bot") void runBotAnalysis();
                   else if (tab === "manual" && manualKind) void runManualAnalysis();
                 }}
-                disabled={
-                  botLoading ||
-                  manualLoading ||
-                  (tab === "manual" && !manualKind)
-                }
+                disabled={botLoading || manualLoading || (tab === "manual" && !manualKind)}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#4bb4b3] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3aa09e] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {botLoading || manualLoading ? (
@@ -591,7 +594,9 @@ export function AiAssistant({
               buttonSize === ASSISTANT_BUTTON_SIZE_MOBILE ? "size-10" : "size-14",
             )}
           >
-            <Sparkles className={buttonSize === ASSISTANT_BUTTON_SIZE_MOBILE ? "size-4" : "size-5"} />
+            <Sparkles
+              className={buttonSize === ASSISTANT_BUTTON_SIZE_MOBILE ? "size-4" : "size-5"}
+            />
             <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-white bg-[#4bb4b3]" />
             <span
               className={cn(
@@ -731,7 +736,10 @@ function BestBotView({
         </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs">
           <RecommendationStat label="Actual" value={`${topBot.actualProbability.toFixed(1)}%`} />
-          <RecommendationStat label="Expected" value={`${topBot.expectedProbability.toFixed(1)}%`} />
+          <RecommendationStat
+            label="Expected"
+            value={`${topBot.expectedProbability.toFixed(1)}%`}
+          />
           <RecommendationStat
             label="Edge"
             value={signedPercent(topBot.edge)}
@@ -747,8 +755,14 @@ function BestBotView({
             Risk-sized entry
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <RecommendationStat label="Stake" value={`${currency} ${stakeRecommendation.stake.toFixed(2)}`} />
-            <RecommendationStat label="Martingale" value={`×${stakeRecommendation.martingale.toFixed(2)}`} />
+            <RecommendationStat
+              label="Stake"
+              value={`${currency} ${stakeRecommendation.stake.toFixed(2)}`}
+            />
+            <RecommendationStat
+              label="Martingale"
+              value={`×${stakeRecommendation.martingale.toFixed(2)}`}
+            />
             <RecommendationStat
               label="Risk band"
               value={capitalize(stakeRecommendation.riskBand)}
@@ -889,7 +903,13 @@ function ManualTraderView({
         />
         <div className="grid grid-cols-2 gap-2">
           {(
-            ["even_odd", "over_under", "matches_differs", "rise_fall", "accumulator"] as ManualContractKind[]
+            [
+              "even_odd",
+              "over_under",
+              "matches_differs",
+              "rise_fall",
+              "accumulator",
+            ] as ManualContractKind[]
           ).map((k) => (
             <button
               key={k}
@@ -947,7 +967,9 @@ function ManualTraderView({
       />
 
       {loading && (
-        <RunningCard description={`Pulling the latest 500 ticks across every synthetic market for the best ${MANUAL_KIND_LABELS[kind]} signal.`} />
+        <RunningCard
+          description={`Pulling the latest 500 ticks across every synthetic market for the best ${MANUAL_KIND_LABELS[kind]} signal.`}
+        />
       )}
 
       {!loading && hasRun && error && <ErrorCard message={error} />}
@@ -959,7 +981,9 @@ function ManualTraderView({
             <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#4bb4b3]">
               Best market
             </div>
-            <div className="font-semibold text-[#172029] dark:text-[#f1f5f9]">{topMarket.marketLabel}</div>
+            <div className="font-semibold text-[#172029] dark:text-[#f1f5f9]">
+              {topMarket.marketLabel}
+            </div>
             <div className="mt-0.5 text-xs font-medium text-[#42505b] dark:text-[#d4dbe2]">
               {topMarket.side}
             </div>
@@ -986,7 +1010,10 @@ function ManualTraderView({
                 Flat stake advice
               </div>
               <div className="flex flex-wrap gap-3 text-xs">
-                <RecommendationStat label="Stake" value={`${currency} ${stakeAdvice.stake.toFixed(2)}`} />
+                <RecommendationStat
+                  label="Stake"
+                  value={`${currency} ${stakeAdvice.stake.toFixed(2)}`}
+                />
                 <RecommendationStat
                   label="Risk band"
                   value={capitalize(stakeAdvice.riskBand)}
@@ -1049,9 +1076,7 @@ function ManualTraderView({
       )}
 
       {!loading && hasRun && !error && !topMarket && kind && (
-        <InfoCard title="No results">
-          Run the scan again to refresh the markets.
-        </InfoCard>
+        <InfoCard title="No results">Run the scan again to refresh the markets.</InfoCard>
       )}
 
       <AccuracyDisclaimer />
@@ -1082,8 +1107,14 @@ function MemoryView({
         <MemoryCard label="Tracked trades" value={trades.length} />
         <MemoryCard
           label="Bot monitor P/L"
-          value={botMonitorSnapshot ? `${botMonitorSnapshot.stats.totalProfitLoss.toFixed(2)}` : "0.00"}
-          valueClassName={(botMonitorSnapshot?.stats.totalProfitLoss ?? 0) >= 0 ? "text-[#078a5b]" : "text-[#cc2f39]"}
+          value={
+            botMonitorSnapshot ? `${botMonitorSnapshot.stats.totalProfitLoss.toFixed(2)}` : "0.00"
+          }
+          valueClassName={
+            (botMonitorSnapshot?.stats.totalProfitLoss ?? 0) >= 0
+              ? "text-[#078a5b]"
+              : "text-[#cc2f39]"
+          }
         />
       </div>
 
@@ -1230,10 +1261,38 @@ function BotPresetForm({
   return (
     <div className="rounded-2xl bg-[#f7f9fa] p-3 dark:bg-[#141719]">
       <div className="grid grid-cols-2 gap-3">
-        <UnitInput label="Stake" value={stake} onChange={onStake} unit={currency} min={0.35} step={0.01} />
-        <UnitInput label="Martingale" value={martingale} onChange={onMartingale} unit="×" min={1} step={0.05} />
-        <UnitInput label="Take profit" value={takeProfit} onChange={onTakeProfit} unit={currency} min={0} step={0.01} />
-        <UnitInput label="Stop loss" value={stopLoss} onChange={onStopLoss} unit={currency} min={0} step={0.01} />
+        <UnitInput
+          label="Stake"
+          value={stake}
+          onChange={onStake}
+          unit={currency}
+          min={0.35}
+          step={0.01}
+        />
+        <UnitInput
+          label="Martingale"
+          value={martingale}
+          onChange={onMartingale}
+          unit="×"
+          min={1}
+          step={0.05}
+        />
+        <UnitInput
+          label="Take profit"
+          value={takeProfit}
+          onChange={onTakeProfit}
+          unit={currency}
+          min={0}
+          step={0.01}
+        />
+        <UnitInput
+          label="Stop loss"
+          value={stopLoss}
+          onChange={onStopLoss}
+          unit={currency}
+          min={0}
+          step={0.01}
+        />
       </div>
       <div className="mt-3">
         <UnitInput label="Number of runs" value={runs} onChange={onRuns} min={1} step={1} />
@@ -1272,7 +1331,14 @@ function ManualPresetForm({
   return (
     <div className="rounded-2xl bg-[#f7f9fa] p-3 dark:bg-[#141719]">
       <div className="grid grid-cols-2 gap-3">
-        <UnitInput label="Stake" value={stake} onChange={onStake} unit={currency} min={0.35} step={0.01} />
+        <UnitInput
+          label="Stake"
+          value={stake}
+          onChange={onStake}
+          unit={currency}
+          min={0.35}
+          step={0.01}
+        />
         {showGrowthRate ? (
           <UnitInput
             label="Growth rate"
@@ -1285,8 +1351,22 @@ function ManualPresetForm({
         ) : (
           <div />
         )}
-        <UnitInput label="Take profit" value={takeProfit} onChange={onTakeProfit} unit={currency} min={0} step={0.01} />
-        <UnitInput label="Stop loss" value={stopLoss} onChange={onStopLoss} unit={currency} min={0} step={0.01} />
+        <UnitInput
+          label="Take profit"
+          value={takeProfit}
+          onChange={onTakeProfit}
+          unit={currency}
+          min={0}
+          step={0.01}
+        />
+        <UnitInput
+          label="Stop loss"
+          value={stopLoss}
+          onChange={onStopLoss}
+          unit={currency}
+          min={0}
+          step={0.01}
+        />
       </div>
       {showGrowthRate && (
         <div className="mt-3">
@@ -1348,10 +1428,10 @@ function AccuracyDisclaimer() {
     <div className="flex gap-2 rounded-xl border border-[#fde68a] bg-[#fffbeb] p-3 text-xs text-[#92400e] dark:border-[#4a3310] dark:bg-[#221c0d] dark:text-[#fcd34d]">
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
       <span>
-        Synthetic indices are RNG-driven and do not react to news or events. This analysis
-        traces the last 500 ticks and ranks markets by statistical confidence (z-score), not just
-        raw edge. Edge values of 0–3% with low confidence are typical noise — always trade within
-        your risk tolerance.
+        Synthetic indices are RNG-driven and do not react to news or events. This analysis traces
+        the last 500 ticks and ranks markets by statistical confidence (z-score), not just raw edge.
+        Edge values of 0–3% with low confidence are typical noise — always trade within your risk
+        tolerance.
       </span>
     </div>
   );
@@ -1437,7 +1517,9 @@ function MemoryCard({
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[#64707c] dark:text-[#aab1b8]">
         {label}
       </div>
-      <div className={cn("mt-2 text-sm font-bold text-[#172029] dark:text-[#f1f5f9]", valueClassName)}>
+      <div
+        className={cn("mt-2 text-sm font-bold text-[#172029] dark:text-[#f1f5f9]", valueClassName)}
+      >
         {value}
       </div>
     </div>

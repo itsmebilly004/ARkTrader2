@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Info, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { updateTrackedTrade, upsertTrackedTrade } from "@/lib/activity-memory";
 import { isDemoAccount } from "@/lib/deriv-account";
@@ -67,7 +67,7 @@ export function AccumulatorTradePanel({
   initialTicks,
   autoRun = false,
 }: Props) {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { account, balance: accountBalance, currency, refreshBalances } = useDerivBalanceContext();
   const token = account?.deriv_token ?? null;
   const tradeCurrency = currency || account?.currency || "";
@@ -77,7 +77,9 @@ export function AccumulatorTradePanel({
   const [growthRate, setGrowthRate] = useState<number>(() => initialGrowthRate ?? 0.03);
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(() => (initialTakeProfit ?? 0) > 0);
   const [takeProfit, setTakeProfit] = useState<number>(() => initialTakeProfit ?? 0);
-  const [holdTicks, setHoldTicks] = useState<number>(() => Math.max(0, Math.round(initialTicks ?? 0)));
+  const [holdTicks, setHoldTicks] = useState<number>(() =>
+    Math.max(0, Math.round(initialTicks ?? 0)),
+  );
   const autoRunFiredRef = useRef(false);
   const autoSoldRef = useRef(false);
   const [busy, setBusy] = useState(false);

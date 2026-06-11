@@ -7,7 +7,7 @@ import { getBlocklyRuntime, getDerivWorkspace } from "@/external/bot-builder/blo
 import { persistWorkspaceSnapshot } from "@/external/bot-builder/workspace-persistence";
 import { TopShell } from "@/components/top-shell";
 import { BotRunMonitorPanel } from "@/components/bot-run-monitor";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { useBotRunner } from "@/context/bot-runner-context";
 
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/bot-builder")({
 });
 
 function BotBuilderPage() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { currency } = useDerivBalanceContext();
   const runner = useBotRunner();
   const [activeTab, setActiveTab] = useState("summary");

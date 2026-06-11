@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { TopShell } from "@/components/top-shell";
 import { DerivChart } from "@/components/deriv-chart";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-memory";
 
 export const Route = createFileRoute("/charts")({
@@ -25,7 +25,7 @@ function computeChartHeight() {
 }
 
 function ChartsPage() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const [symbol, setSymbol] = useState(
     () => readRememberedMarket(undefined, "charts", "R_100") ?? "R_100",
   );

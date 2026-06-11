@@ -1,16 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
-import {
-  Wallet,
-  TrendingUp,
-  Activity,
-  Bot,
-  ArrowUpRight,
-  ArrowDownRight,
-} from "lucide-react";
+import { Wallet, TrendingUp, Activity, Bot, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SYNTHETIC_MARKETS } from "@/lib/deriv";
@@ -50,7 +43,7 @@ function StatCard({
 }
 
 function DashboardHome() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { balance, currency } = useDerivBalanceContext();
   const [trades, setTrades] = useState<Tables<"trades">[]>([]);
 

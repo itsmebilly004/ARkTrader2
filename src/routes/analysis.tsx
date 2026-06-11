@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Info } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-memory";
 import { calculateDigitStats, digitsFromPrices, lastDigitFromPrice } from "@/lib/digit-stats";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,7 @@ const DIGIT_COLORS = [
 ];
 
 function Analysis() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const [tab, setTab] = useState<Tab>("Dcircles");
   const [symbol, setSymbol] = useState(
     () => readRememberedMarket(undefined, "analysis", "1HZ10V") ?? "1HZ10V",

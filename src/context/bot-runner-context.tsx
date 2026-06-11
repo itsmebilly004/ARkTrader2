@@ -8,12 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
-import {
-  resolveRunnableBotSettings,
-  type BotBuilderSettings,
-} from "@/lib/bot-builder-state";
+import { resolveRunnableBotSettings, type BotBuilderSettings } from "@/lib/bot-builder-state";
 import {
   persistBotMonitorSnapshot,
   readBotMonitorSnapshot,
@@ -115,7 +112,6 @@ function contractTypeLabel(settings: BotBuilderSettings): string {
   return `${family} / ${dir}`;
 }
 
-
 function shouldRetryBotTrade(error: unknown) {
   const message = getDerivTradingErrorMessage(error).toLowerCase();
   const code = String((error as { code?: unknown })?.code ?? "").toLowerCase();
@@ -137,7 +133,7 @@ function formatTime() {
 }
 
 export function BotRunnerProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { account, currency, refreshBalances } = useDerivBalanceContext();
 
   const [status, setStatus] = useState<BotMonitorStatus>("stopped");
@@ -187,10 +183,7 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
   }, [journal, memoryReady, stats, status, transactions, user?.id]);
 
   function addJournal(message: string, type: BotMonitorJournalEntry["type"] = "info") {
-    setJournal((prev) => [
-      { id: crypto.randomUUID(), message, time: formatTime(), type },
-      ...prev,
-    ]);
+    setJournal((prev) => [{ id: crypto.randomUUID(), message, time: formatTime(), type }, ...prev]);
   }
 
   const resetRunner = useCallback(() => {
@@ -230,7 +223,10 @@ export function BotRunnerProvider({ children }: { children: ReactNode }) {
     const settings = resolveRunnableBotSettings(user.id);
     if (!settings) {
       toast.error("No bot settings found. Build a strategy in the Bot Builder first.");
-      addJournal("Run blocked: no bot settings found. Open the Bot Builder to set up a strategy.", "error");
+      addJournal(
+        "Run blocked: no bot settings found. Open the Bot Builder to set up a strategy.",
+        "error",
+      );
       return;
     }
 

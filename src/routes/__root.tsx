@@ -1,5 +1,6 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/context/auth-context";
 import { DerivBalanceProvider } from "@/context/deriv-balance-context";
 import { BotRunnerProvider } from "@/context/bot-runner-context";
 
@@ -95,10 +96,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <DerivBalanceProvider>
-      <BotRunnerProvider>
-        <Outlet />
-      </BotRunnerProvider>
-    </DerivBalanceProvider>
+    <AuthProvider>
+      <DerivBalanceProvider>
+        <BotRunnerProvider>
+          <Outlet />
+        </BotRunnerProvider>
+      </DerivBalanceProvider>
+    </AuthProvider>
   );
 }

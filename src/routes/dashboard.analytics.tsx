@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/dashboard/analytics")({
 });
 
 function AnalyticsPage() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const [trades, setTrades] = useState<Tables<"trades">[]>([]);
 
   useEffect(() => {

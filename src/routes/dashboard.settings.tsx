@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthContext } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -108,7 +108,7 @@ function BalanceEditRow({
 }
 
 function SettingsPage() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { accounts, refreshBalances } = useDerivBalanceContext();
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
