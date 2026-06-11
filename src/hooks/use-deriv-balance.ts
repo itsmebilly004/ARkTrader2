@@ -104,6 +104,27 @@ function dbToDerivAccount(row: DbAccount): DerivAccount | null {
 
 const SELECTED_KEY = (userId: string) => `selected_account:${userId}`;
 
+async function fetchAccountsFromApi(accessToken: string): Promise<DbAccount[] | null> {
+  try {
+    const response = await fetch("/api/deriv-accounts", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      console.error("[Balances] Account API failed", {
+        status: response.status,
+        body,
+      });
+      return null;
+    }
+    const body = (await response.json()) as { accounts?: DbAccount[] };
+    return Array.isArray(body.accounts) ? body.accounts : [];
+  } catch (error) {
+    console.error("[Balances] Account API request failed", error);
+    return null;
+  }
+}
+
 export function useDerivBalance(): LiveBalance {
   const { user, session, loading: authLoading } = useAuthContext();
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
@@ -112,14 +133,20 @@ export function useDerivBalance(): LiveBalance {
   const [refreshing, setRefreshing] = useState(false);
   const seededRef = useRef(false);
 
-  const loadAccounts = useCallback(async (userId: string) => {
-    const { data, error } = await supabase.from("accounts").select("*").eq("user_id", userId);
-    if (error) {
-      console.error("[Balances] Could not load accounts from database", error);
-      setAccounts([]);
-      return [];
+  const loadAccounts = useCallback(async (userId: string, accessToken?: string) => {
+    let rows: DbAccount[] | null = accessToken ? await fetchAccountsFromApi(accessToken) : null;
+
+    if (!rows) {
+      const { data, error } = await supabase.from("accounts").select("*").eq("user_id", userId);
+      if (error) {
+        console.error("[Balances] Could not load accounts from database", error);
+        setAccounts([]);
+        return [];
+      }
+      rows = data as DbAccount[];
     }
-    const mapped = (data ?? [])
+
+    const mapped = (rows ?? [])
       .map((row) => dbToDerivAccount(row as DbAccount))
       .filter((account): account is DerivAccount => Boolean(account))
       .sort((a, b) => Number(a.is_demo) - Number(b.is_demo));
@@ -128,12 +155,12 @@ export function useDerivBalance(): LiveBalance {
   }, []);
 
   const loadProvisionedAccounts = useCallback(
-    async (userId: string, email: string | null) => {
-      let mapped = await loadAccounts(userId);
+    async (userId: string, email: string | null, accessToken?: string) => {
+      let mapped = await loadAccounts(userId, accessToken);
       if (mapped && mapped.length > 0) return mapped;
 
       await ensureUserProvisioned(userId, email);
-      mapped = await loadAccounts(userId);
+      mapped = await loadAccounts(userId, accessToken);
       if (!mapped || mapped.length === 0) {
         console.warn("[Balances] No account rows are visible for the signed-in user", {
           userId,
@@ -161,8 +188,8 @@ export function useDerivBalance(): LiveBalance {
     const init = async () => {
       if (cancelled) return;
       const mapped = seededRef.current
-        ? await loadAccounts(user.id)
-        : await loadProvisionedAccounts(user.id, user.email ?? null);
+        ? await loadAccounts(user.id, session.access_token)
+        : await loadProvisionedAccounts(user.id, user.email ?? null, session.access_token);
       seededRef.current = true;
       if (cancelled) return;
       setLoading(false);
@@ -185,7 +212,7 @@ export function useDerivBalance(): LiveBalance {
         "postgres_changes",
         { event: "*", schema: "public", table: "accounts", filter: `user_id=eq.${user.id}` },
         () => {
-          void loadAccounts(user.id);
+          void loadAccounts(user.id, session.access_token);
         },
       )
       .subscribe();
@@ -200,7 +227,11 @@ export function useDerivBalance(): LiveBalance {
     async (_reason?: string, selectedAccountId?: string) => {
       if (!user) return;
       setRefreshing(true);
-      const mapped = await loadProvisionedAccounts(user.id, user.email ?? null);
+      const mapped = await loadProvisionedAccounts(
+        user.id,
+        user.email ?? null,
+        session?.access_token,
+      );
       if (
         selectedAccountId &&
         mapped?.some((account) => account.account_id === selectedAccountId)
@@ -210,7 +241,7 @@ export function useDerivBalance(): LiveBalance {
       }
       setRefreshing(false);
     },
-    [user, loadProvisionedAccounts],
+    [session?.access_token, user, loadProvisionedAccounts],
   );
 
   const switchAccount = useCallback(
