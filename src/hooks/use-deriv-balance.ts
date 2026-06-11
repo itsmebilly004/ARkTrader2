@@ -84,7 +84,6 @@ function dbToDerivAccount(row: DbAccount): DerivAccount {
   };
 }
 
-
 const SELECTED_KEY = (userId: string) => `selected_account:${userId}`;
 
 export function useDerivBalance(): LiveBalance {
@@ -143,7 +142,9 @@ export function useDerivBalance(): LiveBalance {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "accounts", filter: `user_id=eq.${user.id}` },
-        () => { void loadAccounts(user.id); },
+        () => {
+          void loadAccounts(user.id);
+        },
       )
       .subscribe();
 
@@ -154,10 +155,17 @@ export function useDerivBalance(): LiveBalance {
   }, [user, loadAccounts]);
 
   const refreshBalances = useCallback(
-    async (_reason?: string, _selectedAccountId?: string) => {
+    async (_reason?: string, selectedAccountId?: string) => {
       if (!user) return;
       setRefreshing(true);
-      await loadAccounts(user.id);
+      const mapped = await loadAccounts(user.id);
+      if (
+        selectedAccountId &&
+        mapped?.some((account) => account.account_id === selectedAccountId)
+      ) {
+        setSelectedId(selectedAccountId);
+        localStorage.setItem(SELECTED_KEY(user.id), selectedAccountId);
+      }
       setRefreshing(false);
     },
     [user, loadAccounts],

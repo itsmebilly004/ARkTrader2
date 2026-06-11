@@ -58,10 +58,23 @@ function nextContractId(): string {
 
 function simulatedBasePrice(symbol: string): number {
   const bases: Record<string, number> = {
-    R_10: 600, R_25: 1800, R_50: 3200, R_75: 5300, R_100: 8500,
-    "1HZ10V": 620, "1HZ25V": 1850, "1HZ50V": 3250, "1HZ75V": 5400, "1HZ100V": 8600,
-    BOOM500: 4200, BOOM1000: 9800, CRASH500: 4100, CRASH1000: 9600,
-    stpRNG: 100, RDBEAR: 2100, RDBULL: 2900,
+    R_10: 600,
+    R_25: 1800,
+    R_50: 3200,
+    R_75: 5300,
+    R_100: 8500,
+    "1HZ10V": 620,
+    "1HZ25V": 1850,
+    "1HZ50V": 3250,
+    "1HZ75V": 5400,
+    "1HZ100V": 8600,
+    BOOM500: 4200,
+    BOOM1000: 9800,
+    CRASH500: 4100,
+    CRASH1000: 9600,
+    stpRNG: 100,
+    RDBEAR: 2100,
+    RDBULL: 2900,
   };
   return bases[symbol] ?? 1000;
 }
@@ -70,6 +83,14 @@ function randomPrice(symbol: string): number {
   const base = simulatedBasePrice(symbol);
   const noise = base * 0.001 * (Math.random() * 2 - 1);
   return parseFloat((base + noise).toFixed(4));
+}
+
+function alignLastDigit(referenceSpot: number, candidateSpot: number): number {
+  const referenceText = Math.abs(referenceSpot).toFixed(4);
+  const candidateText = Math.abs(candidateSpot).toFixed(4);
+  const referenceDigit = referenceText.slice(-1);
+  const aligned = Number(`${candidateText.slice(0, -1)}${referenceDigit}`);
+  return candidateSpot < 0 ? -aligned : aligned;
 }
 
 async function updateAccountBalance(accountId: string, delta: number): Promise<void> {
@@ -91,10 +112,7 @@ async function updateAccountBalance(accountId: string, delta: number): Promise<v
     .eq("loginid", accountId);
 }
 
-async function recordTrade(
-  contract: ContractEntry,
-  accountId: string | null,
-): Promise<void> {
+async function recordTrade(contract: ContractEntry, accountId: string | null): Promise<void> {
   const { data: session } = await supabase.auth.getSession();
   const userId = session.session?.user.id;
   if (!userId) return;
@@ -117,7 +135,10 @@ async function recordTrade(
 
 // ─── DB balance gate ──────────────────────────────────────────────────────────
 
-async function assertSufficientBalance(accountId: string | null | undefined, stake: number): Promise<void> {
+async function assertSufficientBalance(
+  accountId: string | null | undefined,
+  stake: number,
+): Promise<void> {
   if (!accountId) return;
   const { data: session } = await supabase.auth.getSession();
   const userId = session.session?.user.id;
@@ -185,7 +206,8 @@ export async function buyProposal(
   const won = Math.random() < 0.55;
   const entrySpot = randomPrice(entry.symbol);
   const vol = entrySpot * 0.001;
-  const exitSpot = parseFloat((entrySpot + (won ? vol : -vol) * Math.random()).toFixed(4));
+  const rawExitSpot = parseFloat((entrySpot + (won ? vol : -vol) * Math.random()).toFixed(4));
+  const exitSpot = alignLastDigit(entrySpot, rawExitSpot);
   const profit = won ? parseFloat((entry.payout - entry.stake).toFixed(2)) : -entry.stake;
 
   contractCache.set(contractId, {
@@ -227,7 +249,7 @@ export async function subscribeOpenContract(
         profit: -1,
         payout: 0,
         entry_spot: 1000,
-        exit_spot: 999,
+        exit_spot: alignLastDigit(1000, 999),
       };
       onUpdate(fallback, { proposal_open_contract: fallback });
     }, 2000);
@@ -306,6 +328,7 @@ function simulateAccumulatorLiveTicks(
     if (barrierBreached || (isFinalTick && !contract.won)) {
       // Lost: barrier breached
       const finalProfit = parseFloat((-contract.stake).toFixed(2));
+      const finalSpot = alignLastDigit(entrySpot, currentSpot);
       const data: DerivRecord = {
         contract_id: contractId,
         is_sold: true,
@@ -313,15 +336,15 @@ function simulateAccumulatorLiveTicks(
         profit: finalProfit,
         payout: 0,
         entry_spot: entrySpot,
-        exit_spot: currentSpot,
-        current_spot: currentSpot,
+        exit_spot: finalSpot,
+        current_spot: finalSpot,
         high_barrier: upperBarrier,
         low_barrier: lowerBarrier,
         is_valid_to_sell: 0,
       };
       onUpdate(data, { proposal_open_contract: data });
       void recordTrade(
-        { ...contract, won: false, profit: finalProfit, exitSpot: currentSpot },
+        { ...contract, won: false, profit: finalProfit, exitSpot: finalSpot },
         contract.accountId,
       );
       contractCache.delete(contractId);
@@ -330,6 +353,7 @@ function simulateAccumulatorLiveTicks(
 
     if (isFinalTick && contract.won) {
       // Won: ran long enough
+      const finalSpot = alignLastDigit(entrySpot, currentSpot);
       const data: DerivRecord = {
         contract_id: contractId,
         is_sold: true,
@@ -337,8 +361,8 @@ function simulateAccumulatorLiveTicks(
         profit: currentProfit,
         payout: currentPayout,
         entry_spot: entrySpot,
-        exit_spot: currentSpot,
-        current_spot: currentSpot,
+        exit_spot: finalSpot,
+        current_spot: finalSpot,
         high_barrier: upperBarrier,
         low_barrier: lowerBarrier,
         sell_price: currentPayout,
@@ -347,7 +371,13 @@ function simulateAccumulatorLiveTicks(
       };
       onUpdate(data, { proposal_open_contract: data });
       void recordTrade(
-        { ...contract, won: true, profit: currentProfit, payout: currentPayout, exitSpot: currentSpot },
+        {
+          ...contract,
+          won: true,
+          profit: currentProfit,
+          payout: currentPayout,
+          exitSpot: finalSpot,
+        },
         contract.accountId,
       );
       contractCache.delete(contractId);

@@ -2,9 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { AiAssistant } from "@/components/ai-assistant";
-import {
-  BotRunMonitorPanel,
-} from "@/components/bot-run-monitor";
+import { BotRunMonitorPanel } from "@/components/bot-run-monitor";
 import { useAuth } from "@/hooks/use-auth";
 import { useDerivBalanceContext } from "@/context/deriv-balance-context";
 import { useBotRunner } from "@/context/bot-runner-context";
@@ -73,7 +71,9 @@ function totalAssetsLabel(accounts: DerivAccount[]) {
   return entries.map(([assetCurrency, amount]) => formatBalance(amount, assetCurrency)).join(" + ");
 }
 
-function accountDisplayName(account: Pick<DerivAccount, "currency" | "label" | "is_demo" | "is_virtual" | "account_type">) {
+function accountDisplayName(
+  account: Pick<DerivAccount, "currency" | "label" | "is_demo" | "is_virtual" | "account_type">,
+) {
   if (isDemoAccount(account)) return "Demo";
   const meta = currencyMeta(account.currency);
   return meta.name || account.label || "Real account";
@@ -108,8 +108,16 @@ export function TopShell({
   const { user } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { account, accounts, balance, currency, loading: balanceLoading, refreshing, refreshBalances, switchAccount } =
-    useDerivBalanceContext();
+  const {
+    account,
+    accounts,
+    balance,
+    currency,
+    loading: balanceLoading,
+    refreshing,
+    refreshBalances,
+    switchAccount,
+  } = useDerivBalanceContext();
   const runner = useBotRunner();
   const { theme, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -140,7 +148,6 @@ export function TopShell({
       setBotMonitorTab("summary");
     }
   }, [runner.status]);
-
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -242,7 +249,7 @@ export function TopShell({
                     <div className="px-4 pb-2 pt-4">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-sm font-bold text-[#333333] dark:text-[#f2f2f2]">
-                          Your accounts
+                          Deriv accounts
                         </span>
                         <ChevronUp className="size-4 text-[#333333] dark:text-[#f2f2f2]" />
                       </div>
@@ -402,7 +409,6 @@ export function TopShell({
     </div>
   );
 }
-
 
 function AccountList({
   accounts,

@@ -18,11 +18,19 @@ export const Route = createFileRoute("/dashboard/settings")({
   component: SettingsPage,
 });
 
-function BalanceResetRow({ account, onReset }: { account: DerivAccount; onReset: () => void }) {
+function BalanceEditRow({
+  account,
+  onSaved,
+  userId,
+}: {
+  account: DerivAccount;
+  onSaved: () => void;
+  userId: string;
+}) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function handleReset() {
+  async function handleSave() {
     const amount = parseFloat(value);
     if (!Number.isFinite(amount) || amount < 0) {
       toast.error("Enter a valid amount (0 or greater).");
@@ -32,16 +40,17 @@ function BalanceResetRow({ account, onReset }: { account: DerivAccount; onReset:
     const { error } = await supabase
       .from("accounts")
       .update({ balance: amount, updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
       .eq("loginid", account.loginid);
     setBusy(false);
     if (error) {
-      toast.error("Could not reset balance: " + error.message);
+      toast.error("Could not update balance: " + error.message);
     } else {
       toast.success(
-        `${account.is_demo ? "Demo" : "Real"} account balance reset to ${amount.toFixed(2)} ${account.currency ?? "USD"}.`,
+        `${account.is_demo ? "Demo" : "Real"} account balance updated to ${amount.toFixed(2)} ${account.currency ?? "USD"}.`,
       );
       setValue("");
-      onReset();
+      onSaved();
     }
   }
 
@@ -79,7 +88,7 @@ function BalanceResetRow({ account, onReset }: { account: DerivAccount; onReset:
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void handleReset();
+              if (e.key === "Enter") void handleSave();
             }}
           />
         </div>
@@ -87,11 +96,11 @@ function BalanceResetRow({ account, onReset }: { account: DerivAccount; onReset:
           size="sm"
           variant="outline"
           disabled={busy || value === ""}
-          onClick={handleReset}
+          onClick={handleSave}
           className="shrink-0 gap-1.5"
         >
           <RotateCcw className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
-          {busy ? "Saving…" : "Reset"}
+          {busy ? "Saving..." : "Save"}
         </Button>
       </div>
     </li>
@@ -110,7 +119,10 @@ function SettingsPage() {
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (settErr) { toast.error("Could not load settings"); return; }
+    if (settErr) {
+      toast.error("Could not load settings");
+      return;
+    }
     setSettings(
       sett ?? {
         created_at: new Date().toISOString(),
@@ -128,11 +140,15 @@ function SettingsPage() {
     );
   }, [user]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function saveSettings() {
     if (!user || !settings) return;
-    const { error } = await supabase.from("user_settings").upsert({ ...settings, user_id: user.id });
+    const { error } = await supabase
+      .from("user_settings")
+      .upsert({ ...settings, user_id: user.id });
     if (error) toast.error(error.message);
     else toast.success("Settings saved");
   }
@@ -146,7 +162,10 @@ function SettingsPage() {
       supabase.from("bots").delete().eq("user_id", user.id),
     ]);
     const failed = results.find((r) => r.error);
-    if (failed?.error) { toast.error("Partial deletion failed: " + failed.error.message); return; }
+    if (failed?.error) {
+      toast.error("Partial deletion failed: " + failed.error.message);
+      return;
+    }
     await supabase.auth.signOut();
     toast.success("Account data cleared.");
     window.location.href = "/";
@@ -159,7 +178,9 @@ function SettingsPage() {
     <div className="w-full max-w-3xl min-w-0 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your accounts, risk controls, and preferences.</p>
+        <p className="text-sm text-muted-foreground">
+          Manage your accounts, risk controls, and preferences.
+        </p>
       </div>
 
       {/* ── Account overview ── */}
@@ -171,7 +192,10 @@ function SettingsPage() {
         ) : (
           <ul className="divide-y divide-glass-border">
             {accounts.map((a) => (
-              <li key={a.account_id} className="flex min-w-0 items-center justify-between gap-3 py-3">
+              <li
+                key={a.account_id}
+                className="flex min-w-0 items-center justify-between gap-3 py-3"
+              >
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="truncate font-mono text-sm">{a.account_id}</span>
@@ -195,16 +219,16 @@ function SettingsPage() {
         )}
       </section>
 
-      {/* ── Reset balance ── */}
+      {/* Account balance editor */}
       <section className="glass-card rounded-xl p-5">
-        <h3 className="mb-1 text-sm font-medium">Reset account balance</h3>
+        <h3 className="mb-1 text-sm font-medium">Edit account balances</h3>
         <p className="mb-4 text-xs text-muted-foreground">
-          Set any balance you like on your real or demo account. The new amount is saved immediately to the
-          database and reflected in your trading balance.
+          Set any balance you like on your real or demo account. The new amount is saved immediately
+          to the database and reflected in your trading balance.
         </p>
 
         {accounts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No accounts to reset.</p>
+          <p className="text-sm text-muted-foreground">No accounts to edit.</p>
         ) : (
           <ul className="divide-y divide-glass-border">
             {realAccounts.length > 0 && (
@@ -215,10 +239,11 @@ function SettingsPage() {
                   </span>
                 </li>
                 {realAccounts.map((a) => (
-                  <BalanceResetRow
+                  <BalanceEditRow
                     key={a.account_id}
                     account={a}
-                    onReset={() => void refreshBalances("settings-reset")}
+                    userId={user!.id}
+                    onSaved={() => void refreshBalances("settings-balance-edit", a.account_id)}
                   />
                 ))}
               </>
@@ -231,10 +256,11 @@ function SettingsPage() {
                   </span>
                 </li>
                 {demoAccounts.map((a) => (
-                  <BalanceResetRow
+                  <BalanceEditRow
                     key={a.account_id}
                     account={a}
-                    onReset={() => void refreshBalances("settings-reset")}
+                    userId={user!.id}
+                    onSaved={() => void refreshBalances("settings-balance-edit", a.account_id)}
                   />
                 ))}
               </>
@@ -253,7 +279,9 @@ function SettingsPage() {
               <Input
                 type="number"
                 value={settings.daily_loss_limit ?? ""}
-                onChange={(e) => setSettings({ ...settings, daily_loss_limit: Number(e.target.value) })}
+                onChange={(e) =>
+                  setSettings({ ...settings, daily_loss_limit: Number(e.target.value) })
+                }
               />
             </div>
             <div className="space-y-1.5">
@@ -269,13 +297,17 @@ function SettingsPage() {
               <Input
                 type="number"
                 value={settings.max_consecutive_losses ?? ""}
-                onChange={(e) => setSettings({ ...settings, max_consecutive_losses: Number(e.target.value) })}
+                onChange={(e) =>
+                  setSettings({ ...settings, max_consecutive_losses: Number(e.target.value) })
+                }
               />
             </div>
             <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-glass-border bg-foreground/[0.02] p-3">
               <div className="min-w-0">
                 <Label>Default to demo</Label>
-                <p className="text-[11px] text-muted-foreground">New trades &amp; bots default to demo.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  New trades &amp; bots default to demo.
+                </p>
               </div>
               <Switch
                 checked={!!settings.default_demo}
@@ -283,14 +315,18 @@ function SettingsPage() {
               />
             </div>
           </div>
-          <Button className="mt-4 w-full sm:w-auto" onClick={saveSettings}>Save settings</Button>
+          <Button className="mt-4 w-full sm:w-auto" onClick={saveSettings}>
+            Save settings
+          </Button>
         </section>
       )}
 
       {/* ── Danger zone ── */}
       <section className="glass-card rounded-xl border-destructive/30 p-5">
         <h3 className="text-sm font-medium text-destructive">Danger zone</h3>
-        <p className="mt-1 text-sm text-muted-foreground">Permanently remove your data from ArkTrader Hub.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Permanently remove your data from ArkTrader Hub.
+        </p>
         <Button variant="destructive" className="mt-4 w-full sm:w-auto" onClick={deleteAccount}>
           Delete account &amp; data
         </Button>

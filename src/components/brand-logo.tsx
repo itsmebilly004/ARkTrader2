@@ -28,6 +28,7 @@ export function BrandLogo({
           labelClassName,
         )}
       >
+        
         {label}
       </span>
     </span>
