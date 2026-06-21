@@ -475,7 +475,7 @@ export function TradePanel({
         setQuotes(next);
         setQuotesLoading(false);
       }
-    }, 350);
+    }, 0);
     return () => {
       cancelled = true;
       clearTimeout(timeout);

@@ -167,9 +167,23 @@ function calculatePayout(contractType: string, stake: number, barrierStr?: strin
   let payout = stake * 1.95;
 
   switch (contractType) {
-    case "CALL":
-    case "PUT":
-      payout = barrierStr !== undefined ? stake * 1.85 : stake * 1.95;
+    case "CALL": // Rise or Higher
+      if (barrierStr) {
+        // Higher/Lower payouts depend on the sign of the barrier offset
+        payout = barrierStr.includes("-") ? stake * 1.15 : stake * 4.50;
+      } else {
+        // Rise/Fall
+        payout = stake * 1.95;
+      }
+      break;
+    case "PUT": // Fall or Lower
+      if (barrierStr) {
+        // Higher/Lower
+        payout = barrierStr.includes("-") ? stake * 4.50 : stake * 1.15;
+      } else {
+        // Rise/Fall
+        payout = stake * 1.95;
+      }
       break;
     case "DIGITMATCH":
       payout = stake * 9.09;
@@ -179,7 +193,7 @@ function calculatePayout(contractType: string, stake: number, barrierStr?: strin
       break;
     case "DIGITEVEN":
     case "DIGITODD":
-      payout = stake * 1.95;
+      payout = stake * 1.96; // Standard even/odd payout
       break;
     case "DIGITOVER":
       const overWins = 9 - Math.min(X, 8);
@@ -195,10 +209,13 @@ function calculatePayout(contractType: string, stake: number, barrierStr?: strin
     case "NOTOUCH":
       payout = stake * 1.8;
       break;
-    case "ACCU":
     case "MULTUP":
     case "MULTDOWN":
-      payout = stake; // Accumulators/Multipliers don't have fixed upfront payout
+      const mult = barrierStr ? parseInt(barrierStr, 10) : 100;
+      payout = stake * mult; // Multipliers scale the potential max payout
+      break;
+    case "ACCU":
+      payout = stake; 
       break;
   }
   return parseFloat(payout.toFixed(2));
@@ -216,10 +233,16 @@ function simulateWin(contractType: string, barrierStr?: string): boolean {
     case "DIGITOVER": prob = (9 - X) / 10; break;
     case "DIGITUNDER": prob = X / 10; break;
     case "CALL":
-    case "PUT": prob = barrierStr !== undefined ? 0.45 : 0.5; break;
+      prob = barrierStr ? (barrierStr.includes("-") ? 0.8 : 0.2) : 0.5;
+      break;
+    case "PUT":
+      prob = barrierStr ? (barrierStr.includes("-") ? 0.2 : 0.8) : 0.5;
+      break;
     case "ONETOUCH": prob = 0.4; break;
     case "NOTOUCH": prob = 0.6; break;
-    case "ACCU": prob = 0.9; break; // Likely to survive 1 tick
+    case "MULTUP":
+    case "MULTDOWN": prob = 0.5; break;
+    case "ACCU": prob = 0.9; break; 
   }
   return Math.random() < prob;
 }
@@ -320,7 +343,7 @@ export async function subscribeOpenContract(
         exit_spot: alignLastDigit(1000, 999),
       };
       onUpdate(fallback, { proposal_open_contract: fallback });
-    }, 2000);
+    }, 10);
     return () => {};
   }
 
@@ -329,7 +352,7 @@ export async function subscribeOpenContract(
     return simulateAccumulatorLiveTicks(contractId, contract, onUpdate);
   }
 
-  const delayMs = 1500 + Math.floor(Math.random() * 2000);
+  const delayMs = 10; // Instantly resolve standard trades
   let cancelled = false;
 
   const timerId = setTimeout(() => {
