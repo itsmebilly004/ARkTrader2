@@ -18,6 +18,23 @@ export type BotPresetConfig = {
 
 export const BOT_PRESET_CONFIGS: BotPresetConfig[] = [
   {
+    id: "under-destroyer-v2",
+    name: "UnderDestroyer v2 🤖",
+    iconKey: "shield",
+    desc: "Aggressive Digit Under strategy loaded from the Under Destroyer v2 XML asset. Engineered for 1HZ10V precision.",
+    market: "1HZ10V",
+    tradeType: "over_under",
+    contractType: "under",
+    stake: 1.0,
+    tp: 50.0,
+    sl: 10.0,
+    martingale: 1.95,
+    duration: 1,
+    durationUnit: "t",
+    predictionDigit: 5,
+    maxRuns: 50,
+  },
+  {
     id: "nova-v6",
     name: "ArkTraders Nova UnderPulse",
     iconKey: "cpu",
