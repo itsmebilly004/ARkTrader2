@@ -19,7 +19,7 @@ export type BotPresetConfig = {
 export const BOT_PRESET_CONFIGS: BotPresetConfig[] = [
   {
     id: "under-destroyer-v2",
-    name: "UnderDestroyer v2 🤖",
+    name: "Under 3 Pro",
     iconKey: "shield",
     desc: "Aggressive Digit Under strategy loaded from the Under Destroyer v2 XML asset. Engineered for 1HZ10V precision.",
     market: "1HZ10V",
