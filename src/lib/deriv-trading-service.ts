@@ -22,6 +22,7 @@ type ProposalEntry = {
   symbol: string;
   contractType: string;
   accountId: string | null;
+  barrier?: string;
 };
 const proposalCache = new Map<string, ProposalEntry>();
 
@@ -159,6 +160,70 @@ async function assertSufficientBalance(
   }
 }
 
+// ─── Payout & Probability Engine ──────────────────────────────────────────────
+
+function calculatePayout(contractType: string, stake: number, barrierStr?: string): number {
+  const X = barrierStr ? parseInt(barrierStr, 10) : 5;
+  let payout = stake * 1.95;
+
+  switch (contractType) {
+    case "CALL":
+    case "PUT":
+      payout = barrierStr !== undefined ? stake * 1.85 : stake * 1.95;
+      break;
+    case "DIGITMATCH":
+      payout = stake * 9.09;
+      break;
+    case "DIGITDIFF":
+      payout = stake * 1.09;
+      break;
+    case "DIGITEVEN":
+    case "DIGITODD":
+      payout = stake * 1.95;
+      break;
+    case "DIGITOVER":
+      const overWins = 9 - Math.min(X, 8);
+      payout = stake * (10 / overWins) * 0.9048;
+      break;
+    case "DIGITUNDER":
+      const underWins = Math.max(X, 1);
+      payout = stake * (10 / underWins) * 0.9225;
+      break;
+    case "ONETOUCH":
+      payout = stake * 2.1;
+      break;
+    case "NOTOUCH":
+      payout = stake * 1.8;
+      break;
+    case "ACCU":
+    case "MULTUP":
+    case "MULTDOWN":
+      payout = stake; // Accumulators/Multipliers don't have fixed upfront payout
+      break;
+  }
+  return parseFloat(payout.toFixed(2));
+}
+
+function simulateWin(contractType: string, barrierStr?: string): boolean {
+  const X = barrierStr ? parseInt(barrierStr, 10) : 5;
+  let prob = 0.5;
+
+  switch (contractType) {
+    case "DIGITMATCH": prob = 0.1; break;
+    case "DIGITDIFF": prob = 0.9; break;
+    case "DIGITEVEN":
+    case "DIGITODD": prob = 0.5; break;
+    case "DIGITOVER": prob = (9 - X) / 10; break;
+    case "DIGITUNDER": prob = X / 10; break;
+    case "CALL":
+    case "PUT": prob = barrierStr !== undefined ? 0.45 : 0.5; break;
+    case "ONETOUCH": prob = 0.4; break;
+    case "NOTOUCH": prob = 0.6; break;
+    case "ACCU": prob = 0.9; break; // Likely to survive 1 tick
+  }
+  return Math.random() < prob;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function requestProposal(
@@ -170,7 +235,9 @@ export async function requestProposal(
 
   const symbol = String(payload.underlying_symbol ?? payload.symbol ?? "R_100");
   const contractType = String(payload.contract_type ?? context.contractType ?? "CALL");
-  const payout = parseFloat((stake * 1.85).toFixed(2));
+  const barrier = payload.barrier ? String(payload.barrier) : undefined;
+  
+  const payout = calculatePayout(contractType, stake, barrier);
   const proposalId = uid();
 
   proposalCache.set(proposalId, {
@@ -179,6 +246,7 @@ export async function requestProposal(
     symbol,
     contractType,
     accountId: context.selectedAccountId ?? null,
+    barrier,
   });
 
   return {
@@ -187,7 +255,7 @@ export async function requestProposal(
       id: proposalId,
       ask_price: stake,
       payout,
-      longcode: `Win ${payout} if the last tick of ${symbol} rises`,
+      longcode: `Win ${payout} if the last tick of ${symbol} matches prediction`,
       spot: randomPrice(symbol),
       spot_time: Math.floor(Date.now() / 1000),
     },
@@ -203,7 +271,7 @@ export async function buyProposal(
   if (!entry) throw new Error("Proposal not found — cannot buy.");
 
   const contractId = nextContractId();
-  const won = Math.random() < 0.55;
+  const won = simulateWin(entry.contractType, entry.barrier);
   const entrySpot = randomPrice(entry.symbol);
   const vol = entrySpot * 0.001;
   const rawExitSpot = parseFloat((entrySpot + (won ? vol : -vol) * Math.random()).toFixed(4));
@@ -230,7 +298,7 @@ export async function buyProposal(
       buy_price: entry.stake,
       payout: entry.payout,
       start_time: Math.floor(Date.now() / 1000),
-      longcode: `Win ${entry.payout} if the last tick of ${entry.symbol} rises`,
+      longcode: `Win ${entry.payout} if the last tick of ${entry.symbol} matches prediction`,
     },
   };
 }
