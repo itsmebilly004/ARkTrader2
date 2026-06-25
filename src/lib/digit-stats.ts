@@ -6,7 +6,7 @@ export type DigitStats = {
 
 export function lastDigitFromPrice(price: number) {
   if (!Number.isFinite(price)) return null;
-  const text = price.toFixed(2);
+  const text = price.toFixed(4);
   const digit = Number(text.slice(-1));
   return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : null;
 }

@@ -102,7 +102,7 @@ function Analysis() {
     () => slice.map(lastDigitFromPrice).filter((digit): digit is number => digit != null),
     [slice],
   );
-  const dcircleDigits = useMemo(() => digitsFromPrices(ticks, 500), [ticks]);
+  const dcircleDigits = useMemo(() => digitsFromPrices(ticks, window), [ticks, window]);
   const dcircleStats = useMemo(() => calculateDigitStats(dcircleDigits), [dcircleDigits]);
   const counts = useMemo(() => dcircleStats.counts, [dcircleStats]);
   const total = Math.max(dcircleDigits.length, 1);
