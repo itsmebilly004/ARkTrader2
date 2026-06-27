@@ -199,7 +199,7 @@ function Analysis() {
           </div>
           <div className="min-w-0 rounded-md bg-muted px-4 py-2 text-center sm:col-span-2 lg:col-span-1">
             <div className="font-mono text-2xl font-bold text-foreground">
-              {last !== null ? last.toFixed(2) : "—"}
+              {last !== null ? last.toFixed(getPipSize(symbol)) : "-"}
             </div>
             <div className="truncate text-[10px] text-muted-foreground uppercase tracking-wider">
               {marketName}
