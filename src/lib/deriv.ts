@@ -151,40 +151,96 @@ export const TRADE_CATEGORIES: { value: TradeCategory; label: string; descriptio
   { value: "multiplier", label: "Multipliers", description: "Amplify profit and loss with a multiplier." },
 ];
 
-// ─── Price simulation ─────────────────────────────────────────────────────────
 
-const BASE_PRICES: Record<string, number> = {
-  R_10: 600, R_25: 1800, R_50: 3200, R_75: 5300, R_100: 8500,
-  "1HZ10V": 620, "1HZ25V": 1850, "1HZ50V": 3250, "1HZ75V": 5400, "1HZ100V": 8600,
-  BOOM500: 4200, BOOM1000: 9800, CRASH500: 4100, CRASH1000: 9600,
-  stpRNG: 100, RDBEAR: 2100, RDBULL: 2900,
-};
+// ─── Real Market Data via Public Deriv WebSocket ────────────────────────────────
 
-const VOLATILITIES: Record<string, number> = {
-  R_10: 0.0002, R_25: 0.0004, R_50: 0.0006, R_75: 0.0008, R_100: 0.001,
-  "1HZ10V": 0.0003, "1HZ25V": 0.0005, "1HZ50V": 0.0007, "1HZ75V": 0.0009, "1HZ100V": 0.0012,
-  BOOM500: 0.0008, BOOM1000: 0.001, CRASH500: 0.0008, CRASH1000: 0.001,
-  stpRNG: 0.0001, RDBEAR: 0.0006, RDBULL: 0.0006,
-};
+const DERIV_APP_ID = 1089;
+const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 
-const priceState = new Map<string, number>();
+let sharedWs: WebSocket | null = null;
+let wsReadyPromise: Promise<void> | null = null;
+let wsReqId = 1;
+const wsResolvers = new Map<number, { resolve: (val: any) => void; reject: (err: any) => void; timeout: number }>();
+const wsTickSubscribers = new Map<string, Set<(price: number, time: number) => void>>();
+const wsTickStreamIds = new Map<string, string>(); // symbol -> subscription stream id
 
-function currentPrice(symbol: string): number {
-  if (!priceState.has(symbol)) priceState.set(symbol, BASE_PRICES[symbol] ?? 1000);
-  return priceState.get(symbol)!;
+function getDerivWs(): Promise<WebSocket> {
+  if (typeof window === "undefined") return Promise.reject(new Error("No window"));
+  
+  if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+    return Promise.resolve(sharedWs);
+  }
+
+  if (wsReadyPromise) {
+    return wsReadyPromise.then(() => sharedWs!);
+  }
+
+  wsReadyPromise = new Promise((resolve, reject) => {
+    try {
+      const ws = new WebSocket(WS_URL);
+      ws.onopen = () => {
+        sharedWs = ws;
+        resolve();
+      };
+      ws.onerror = (err) => {
+        if (!sharedWs) reject(err);
+      };
+      ws.onclose = () => {
+        sharedWs = null;
+        wsReadyPromise = null;
+        wsTickStreamIds.clear();
+      };
+      ws.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          
+          if (data.msg_type === "tick" && data.tick) {
+            const sym = data.tick.symbol;
+            const subs = wsTickSubscribers.get(sym);
+            if (subs) {
+              const price = Number(data.tick.quote);
+              const time = Number(data.tick.epoch);
+              subs.forEach(cb => cb(price, time));
+            }
+          }
+          
+          if (data.req_id && wsResolvers.has(data.req_id)) {
+            const { resolve, reject: rej, timeout } = wsResolvers.get(data.req_id)!;
+            clearTimeout(timeout);
+            wsResolvers.delete(data.req_id);
+            if (data.error) {
+              rej(new Error(data.error.message || "Deriv WS Error"));
+            } else {
+              resolve(data);
+            }
+          }
+        } catch (e) {
+          console.error("Deriv WS parse error:", e);
+        }
+      };
+    } catch (err) {
+      reject(err);
+    }
+  });
+  
+  return wsReadyPromise.then(() => sharedWs!);
 }
 
-function nextPrice(symbol: string): number {
-  const vol = VOLATILITIES[symbol] ?? 0.0005;
-  const prev = currentPrice(symbol);
-  const change = prev * vol * (Math.random() * 2 - 1);
-  const next = Math.max(prev + change, 0.001);
-  priceState.set(symbol, next);
-  return next;
-}
-
-function decimals(symbol: string): number {
-  return symbol === "stpRNG" ? 2 : 4;
+async function sendWsRequest(payload: Record<string, any>, timeoutMs = 15000): Promise<any> {
+  const ws = await getDerivWs();
+  return new Promise((resolve, reject) => {
+    const req_id = wsReqId++;
+    const request = { ...payload, req_id };
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const timeout = window.setTimeout(() => {
+      wsResolvers.delete(req_id);
+      reject(new Error(`Deriv WS timeout for ${payload.ticks_history || payload.ticks || "request"}`));
+    }, timeoutMs) as any;
+    
+    wsResolvers.set(req_id, { resolve, reject, timeout });
+    ws.send(JSON.stringify(request));
+  });
 }
 
 // ─── Connection status ────────────────────────────────────────────────────────
@@ -339,7 +395,7 @@ export async function getDerivOAuthDiagnostics(): Promise<DerivOAuthDiagnostics>
 
 export function ensureDerivOAuthCanonicalOrigin(_redirect?: string): void {}
 
-// ─── Market data (simulated) ──────────────────────────────────────────────────
+// ─── Market data (Real WebSocket) ─────────────────────────────────────────────
 
 export async function getActiveSymbols(): Promise<ActiveSymbol[]> {
   return SYNTHETIC_MARKETS.map((m) => ({
@@ -353,15 +409,22 @@ export async function getActiveSymbols(): Promise<ActiveSymbol[]> {
 }
 
 export async function fetchTicks(symbol: string, count = 500): Promise<TickPoint[]> {
-  const now = Math.floor(Date.now() / 1000);
-  let price = BASE_PRICES[symbol] ?? 1000;
-  const vol = VOLATILITIES[symbol] ?? 0.0005;
+  const res = await sendWsRequest({
+    ticks_history: symbol,
+    end: "latest",
+    count: Math.min(count, 5000),
+    style: "ticks",
+  });
+  
+  if (!res.history || !res.history.prices || !res.history.times) return [];
+  
   const ticks: TickPoint[] = [];
-  for (let i = count; i >= 0; i--) {
-    price = Math.max(price * (1 + vol * (Math.random() * 2 - 1)), 0.001);
-    ticks.push({ time: now - i, value: parseFloat(price.toFixed(decimals(symbol))) });
+  for (let i = 0; i < res.history.prices.length; i++) {
+    ticks.push({
+      time: Number(res.history.times[i]),
+      value: Number(res.history.prices[i]),
+    });
   }
-  priceState.set(symbol, price);
   return ticks;
 }
 
@@ -369,7 +432,7 @@ export async function publicSendBatch(
   payloads: Array<Record<string, unknown>>,
   options?: { timeoutMs?: number },
 ): Promise<Array<DerivMessage | Error>> {
-  const timeoutMs = options?.timeoutMs ?? 12000;
+  const timeoutMs = options?.timeoutMs ?? 15000;
   return Promise.all(
     payloads.map(async (payload, index): Promise<DerivMessage | Error> => {
       const reqId = Number(payload.req_id ?? index + 1);
@@ -377,12 +440,7 @@ export async function publicSendBatch(
         if (payload.ticks_history) {
           const symbol = String(payload.ticks_history);
           const count = Number(payload.count ?? 500);
-          const ticks = await Promise.race([
-            fetchTicks(symbol, count),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("Request timed out")), timeoutMs),
-            ),
-          ]);
+          const ticks = await fetchTicks(symbol, count);
           return {
             req_id: reqId,
             msg_type: "history",
@@ -392,7 +450,7 @@ export async function publicSendBatch(
             },
           } as DerivMessage;
         }
-        return { req_id: reqId, ...(await send(payload)) };
+        return { req_id: reqId };
       } catch (err) {
         return err instanceof Error ? err : new Error(String(err));
       }
@@ -405,27 +463,24 @@ export async function fetchCandles(
   granularity: number,
   count = 500,
 ): Promise<Candle[]> {
-  const now = Math.floor(Date.now() / 1000);
-  let price = BASE_PRICES[symbol] ?? 1000;
-  const vol = VOLATILITIES[symbol] ?? 0.0005;
-  const candles: Candle[] = [];
-  for (let i = count; i >= 0; i--) {
-    const open = price;
-    const moves = Array.from({ length: 4 }, () => price * (1 + vol * (Math.random() * 2 - 1)));
-    const high = Math.max(open, ...moves);
-    const low = Math.min(open, ...moves);
-    const close = moves[moves.length - 1];
-    price = Math.max(close, 0.001);
-    candles.push({
-      time: now - i * granularity,
-      open: parseFloat(open.toFixed(decimals(symbol))),
-      high: parseFloat(high.toFixed(decimals(symbol))),
-      low: parseFloat(low.toFixed(decimals(symbol))),
-      close: parseFloat(close.toFixed(decimals(symbol))),
-    });
-  }
-  priceState.set(symbol, price);
-  return candles;
+  const res = await sendWsRequest({
+    ticks_history: symbol,
+    end: "latest",
+    count: Math.min(count, 5000),
+    style: "candles",
+    granularity,
+  });
+  
+  if (!res.candles) return [];
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return res.candles.map((c: any) => ({
+    time: Number(c.epoch),
+    open: Number(c.open),
+    high: Number(c.high),
+    low: Number(c.low),
+    close: Number(c.close),
+  }));
 }
 
 export async function subscribeTicks(
@@ -433,19 +488,33 @@ export async function subscribeTicks(
   onTick: (price: number, time: number) => void,
 ): Promise<() => void> {
   if (typeof window === "undefined") return () => {};
-  let active = true;
-  const tick = () => {
-    if (!active) return;
-    const price = nextPrice(symbol);
-    onTick(parseFloat(price.toFixed(decimals(symbol))), Math.floor(Date.now() / 1000));
-  };
-  tick();
-  const id = window.setInterval(tick, 1000);
+  
+  if (!wsTickSubscribers.has(symbol)) {
+    wsTickSubscribers.set(symbol, new Set());
+  }
+  const subs = wsTickSubscribers.get(symbol)!;
+  subs.add(onTick);
+  
+  if (subs.size === 1) {
+    sendWsRequest({ ticks: symbol, subscribe: 1 }).then(res => {
+      if (res.subscription) {
+        wsTickStreamIds.set(symbol, res.subscription.id);
+      }
+    }).catch(console.error);
+  }
+  
   return () => {
-    active = false;
-    window.clearInterval(id);
+    subs.delete(onTick);
+    if (subs.size === 0) {
+      const streamId = wsTickStreamIds.get(symbol);
+      if (streamId) {
+        sendWsRequest({ forget: streamId }).catch(() => {});
+        wsTickStreamIds.delete(symbol);
+      }
+    }
   };
 }
+
 
 // ─── Trading helpers ──────────────────────────────────────────────────────────
 
