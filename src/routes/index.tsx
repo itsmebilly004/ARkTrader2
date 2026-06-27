@@ -249,7 +249,7 @@ function Index() {
                 <div>
                   <div className="text-sm font-semibold">Manual Trader</div>
                   <div className="font-mono text-[11px] text-[oklch(0.55_0.02_260)] dark:text-[#999999]">
-                    {price !== null ? price.toFixed(4) : "-"}
+                    {price !== null ? price.toFixed(getPipSize(symbol)) : "-"}
                   </div>
                 </div>
               </div>
