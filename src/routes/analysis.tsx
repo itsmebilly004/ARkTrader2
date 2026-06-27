@@ -67,7 +67,7 @@ function Analysis() {
     let off: (() => void) | undefined;
     setTicks([]);
     setLast(null);
-    fetchTicks(symbol, 500)
+    fetchTicks(symbol, 5000)
       .then((initialTicks) => {
         if (!active) return;
         setTicks(initialTicks.map((tick) => tick.value));
