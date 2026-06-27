@@ -1,4 +1,5 @@
-import {
+import { getPipSize,
+
   useCallback,
   useEffect,
   useMemo,
@@ -1928,7 +1929,7 @@ function updateDigitStatsFromPrices(
   setStats: Dispatch<SetStateAction<{ latest: number | null; percentages: number[] }>>,
   publish = true,
 ) {
-  const digits = digitsFromPrices(prices, 500);
+  const digits = digitsFromPrices(prices, getPipSize(symbol), 500);
   ref.current = digits;
   if (publish) setStats(calculateDigitStats(digits));
 }
@@ -1939,7 +1940,7 @@ function pushDigit(
   setStats: Dispatch<SetStateAction<{ latest: number | null; percentages: number[] }>>,
   publish = true,
 ) {
-  const digit = lastDigitFromPrice(price);
+  const digit = lastDigitFromPrice(price, getPipSize(symbol));
   if (digit == null) return;
   ref.current.push(digit);
   if (ref.current.length > 500) ref.current.splice(0, ref.current.length - 500);

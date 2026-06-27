@@ -397,6 +397,31 @@ export function ensureDerivOAuthCanonicalOrigin(_redirect?: string): void {}
 
 // ─── Market data (Real WebSocket) ─────────────────────────────────────────────
 
+
+export const PIP_SIZES: Record<string, number> = {
+  "R_10": 3,
+  "R_25": 3,
+  "R_50": 4,
+  "R_75": 4,
+  "R_100": 2,
+  "1HZ10V": 2,
+  "1HZ25V": 2,
+  "1HZ50V": 2,
+  "1HZ75V": 2,
+  "1HZ100V": 2,
+  "BOOM500": 3,
+  "BOOM1000": 3,
+  "CRASH500": 3,
+  "CRASH1000": 3,
+  "stpRNG": 1,
+  "RDBEAR": 4,
+  "RDBULL": 4,
+};
+
+export function getPipSize(symbol: string): number {
+  return PIP_SIZES[symbol] ?? 4;
+}
+
 export async function getActiveSymbols(): Promise<ActiveSymbol[]> {
   return SYNTHETIC_MARKETS.map((m) => ({
     symbol: m.symbol,

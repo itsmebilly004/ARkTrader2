@@ -1,4 +1,4 @@
-import { fetchTicks, SYNTHETIC_MARKETS, type TickPoint } from "@/lib/deriv";
+import { fetchTicks, SYNTHETIC_MARKETS, type TickPoint, getPipSize } from "@/lib/deriv";
 import { BOT_PRESET_CONFIGS, type BotPresetConfig } from "@/lib/bot-presets";
 import { TRADING_BOT_ASSETS } from "@/lib/trading-bot-database";
 import { calculateDigitStats, digitsFromPrices } from "@/lib/digit-stats";
@@ -167,12 +167,12 @@ export async function fetchTicksBatch(
 
 // ─── Digit analysis helpers ──────────────────────────────────────────────────
 
-function buildDigitAnalysis(ticks: TickPoint[]): {
+function buildDigitAnalysis(symbol: string, ticks: TickPoint[]): {
   counts: number[];
   percentages: number[];
   sampleSize: number;
 } {
-  const digits = digitsFromPrices(ticks.map((t) => t.value), ticks.length);
+  const digits = digitsFromPrices(ticks.map((t) => t.value), getPipSize(symbol), ticks.length);
   const stats = calculateDigitStats(digits);
   return { counts: stats.counts, percentages: stats.percentages, sampleSize: digits.length };
 }
@@ -313,7 +313,7 @@ export async function analyzeBestBotOpportunities(
   const digitDataPerMarket = new Map<string, { counts: number[]; sampleSize: number }>();
   for (const [symbol, ticks] of ticksMap) {
     if (!ticks || ticks.length < 10) continue;
-    const { counts, sampleSize } = buildDigitAnalysis(ticks);
+    const { counts, sampleSize } = buildDigitAnalysis(symbol, ticks);
     digitDataPerMarket.set(symbol, { counts, sampleSize });
   }
   await pace(startedAt, minDurationMs * 0.4);
@@ -414,7 +414,7 @@ export async function analyzeBestMarketForContract(
       }
 
       const marketLabel = marketLabelForSymbol(symbol);
-      const { counts, percentages, sampleSize } = buildDigitAnalysis(ticks);
+      const { counts, percentages, sampleSize } = buildDigitAnalysis(symbol, ticks);
       const safeTotal = Math.max(sampleSize, 1);
 
       if (kind === "even_odd") {
@@ -620,7 +620,7 @@ export function recommendManualStake({
 
 export async function analyzeDigitsForSymbol(symbol: string): Promise<DigitMarketAnalysis> {
   const ticks = await fetchTicksSingle(symbol, 500);
-  const digits = digitsFromPrices(ticks.map((t) => t.value), 500);
+  const digits = digitsFromPrices(ticks.map((t) => t.value), getPipSize(symbol), 500);
   const stats = calculateDigitStats(digits);
   const counts = stats.counts;
   const sampleSize = digits.length;

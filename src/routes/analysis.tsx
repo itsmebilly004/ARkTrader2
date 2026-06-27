@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { TopShell } from "@/components/top-shell";
-import { fetchTicks, subscribeTicks, SYNTHETIC_MARKETS } from "@/lib/deriv";
+import { fetchTicks, subscribeTicks, SYNTHETIC_MARKETS, getPipSize } from "@/lib/deriv";
 import {
   Select,
   SelectContent,
@@ -99,10 +99,10 @@ function Analysis() {
 
   const slice = useMemo(() => ticks.slice(-window), [ticks, window]);
   const digits = useMemo(
-    () => slice.map(lastDigitFromPrice).filter((digit): digit is number => digit != null),
+    () => slice.map(p => lastDigitFromPrice(p, getPipSize(symbol))).filter((digit): digit is number => digit != null),
     [slice],
   );
-  const dcircleDigits = useMemo(() => digitsFromPrices(ticks, window), [ticks, window]);
+  const dcircleDigits = useMemo(() => digitsFromPrices(ticks, getPipSize(symbol), window), [ticks, window]);
   const dcircleStats = useMemo(() => calculateDigitStats(dcircleDigits), [dcircleDigits]);
   const counts = useMemo(() => dcircleStats.counts, [dcircleStats]);
   const total = Math.max(dcircleDigits.length, 1);

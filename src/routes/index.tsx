@@ -10,6 +10,7 @@ import { readRememberedMarket, rememberMarketSelection } from "@/lib/activity-me
 import {
   DERIV_OAUTH_DASHBOARD_FAILURE_MESSAGE,
   recordDerivOAuthTrace,
+  getPipSize,
   type TradeCategory,
 } from "@/lib/deriv";
 import { isDigitTrade } from "@/lib/trade-types";
@@ -341,7 +342,7 @@ function Index() {
 
           {/* Digit stats row — shown prominently for even/odd, over/under, matches/differs */}
           {isDigitTrade(tradeType) && (
-            <MobileDigitStatsRow tickPrices={tickPrices} currentPrice={price} />
+            <MobileDigitStatsRow tickPrices={tickPrices} currentPrice={price} symbol={symbol} />
           )}
 
           {/* Scrollable content: trade params → chart */}
@@ -399,11 +400,13 @@ function Index() {
 function MobileDigitStatsRow({
   tickPrices,
   currentPrice,
+  symbol
 }: {
   tickPrices: number[];
   currentPrice: number | null;
+  symbol: string;
 }) {
-  const digits = digitsFromPrices(tickPrices, 500);
+  const digits = digitsFromPrices(tickPrices, getPipSize(symbol), 500);
   const { percentages, latest } = calculateDigitStats(digits);
   const max = Math.max(...percentages);
 
