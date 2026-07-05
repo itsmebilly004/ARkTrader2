@@ -299,7 +299,8 @@ export async function buyProposal(
   const vol = entrySpot * 0.001;
   const rawExitSpot = parseFloat((entrySpot + (won ? vol : -vol) * Math.random()).toFixed(4));
   const exitSpot = alignLastDigit(entrySpot, rawExitSpot);
-  const profit = won ? parseFloat((entry.payout - entry.stake).toFixed(2)) : -entry.stake;
+  const markup = entry.stake * 0.02;
+  const profit = won ? parseFloat((entry.payout - entry.stake - markup).toFixed(2)) : parseFloat((-entry.stake - markup).toFixed(2));
 
   contractCache.set(contractId, {
     won,
@@ -411,14 +412,16 @@ function simulateAccumulatorLiveTicks(
     const step = entrySpot * 0.0003 * (Math.random() * 2 - 1);
     currentSpot = parseFloat((currentSpot + step).toFixed(4));
     currentPayout = parseFloat((currentPayout * (1 + growthPerTick)).toFixed(4));
-    const currentProfit = parseFloat((currentPayout - contract.stake).toFixed(2));
+    const markup = contract.stake * 0.02;
+    const currentProfit = parseFloat((currentPayout - contract.stake - markup).toFixed(2));
 
     const barrierBreached = currentSpot >= upperBarrier || currentSpot <= lowerBarrier;
     const isFinalTick = tick >= maxTicks;
 
     if (barrierBreached || (isFinalTick && !contract.won)) {
       // Lost: barrier breached
-      const finalProfit = parseFloat((-contract.stake).toFixed(2));
+      const markup = contract.stake * 0.02;
+      const finalProfit = parseFloat((-contract.stake - markup).toFixed(2));
       const finalSpot = alignLastDigit(entrySpot, currentSpot);
       const data: DerivRecord = {
         contract_id: contractId,
