@@ -260,9 +260,9 @@ export async function requestProposal(
   const contractType = String(payload.contract_type ?? context.contractType ?? "CALL");
   const barrier = payload.barrier ? String(payload.barrier) : undefined;
   
-  const basePayout = calculatePayout(contractType, stake, barrier);
-  const commission = basePayout * 0.03;
-  const askPrice = parseFloat((stake + commission).toFixed(2));
+  const M = calculatePayout(contractType, 1, barrier);
+  const askPrice = stake;
+  const basePayout = parseFloat(((stake * M) / (1 + 0.03 * M)).toFixed(2));
   const proposalId = uid();
 
   proposalCache.set(proposalId, {
